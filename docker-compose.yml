@@ -1,0 +1,18 @@
+version: '3.5'
+
+services:
+    go:
+      image: triebwerk
+      build: .
+      env_file:
+        - .env
+      tty: true
+      stdin_open: true
+      networks:
+        - panzerkampf
+      ports:
+        - "9090:8080"
+
+networks:
+  panzerkampf:
+    name: panzerkampf
