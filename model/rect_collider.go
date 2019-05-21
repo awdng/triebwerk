@@ -29,8 +29,8 @@ type RectCollider struct {
 	CollisionBack      bool
 }
 
-// newRectCollider creates a new rectangle collider
-func newRectCollider(x float32, y float32, width float32, depth float32) RectCollider {
+// NewRectCollider creates a new rectangle collider
+func NewRectCollider(x float32, y float32, width float32, depth float32) RectCollider {
 	return RectCollider{
 		Pivot: &Point{
 			X: x,

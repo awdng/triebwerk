@@ -2,14 +2,14 @@ package model
 
 import "time"
 
-const width = 5
-const depth = 7
-
 // Connection represents the network connection of the player
 type Connection interface {
-	Close(writeWait time.Duration, graceful bool)
-	Write(writeWait time.Duration, data []byte) error
 	Ping(writeWait time.Duration)
+	Close(writeWait time.Duration, graceful bool)
+	PrepareWrite(writeWait time.Duration)
+	Write(data []byte) error
+	PrepareRead(maxMessageSize int64, pongWait time.Duration)
+	Read() ([]byte, error)
 }
 
 // Controls ...
@@ -27,7 +27,7 @@ type Controls struct {
 type Player struct {
 	ID         int
 	Control    Controls
-	collider   RectCollider
+	Collider   RectCollider
 	NetworkOut chan []byte
 	Connection Connection
 }

@@ -61,7 +61,7 @@ func (n *NetworkManager) run() {
 		case client := <-n.register:
 			n.clients[client] = true
 		case client := <-n.unregister:
-			if c, ok := n.clients[client]; ok {
+			if _, ok := n.clients[client]; ok {
 				client.Disconnect()
 				delete(n.clients, client)
 			}
@@ -86,7 +86,7 @@ func (n *NetworkManager) Register(player *model.Player) {
 // Send data to a client
 func (n *NetworkManager) Send(player *model.Player, buffer []byte) error {
 	if _, ok := n.clients[player]; !ok {
-		return fmt.Errorf("Client not found %s", player.ID)
+		return fmt.Errorf("Client not found %d", player.ID)
 	}
 
 	player.NetworkOut <- buffer
@@ -96,7 +96,7 @@ func (n *NetworkManager) Send(player *model.Player, buffer []byte) error {
 // StartWriter starts the network writer for a player in a goroutine
 func (n *NetworkManager) StartWriter(player *model.Player) error {
 	if _, ok := n.clients[player]; !ok {
-		return fmt.Errorf("Client not found %s", player.ID)
+		return fmt.Errorf("Client not found %d", player.ID)
 	}
 
 	go n.writer(player)
@@ -117,18 +117,42 @@ func (n *NetworkManager) writer(player *model.Player) {
 	for {
 		select {
 		case message, ok := <-player.NetworkOut:
+			player.Connection.PrepareWrite(writeWait)
 			if !ok {
 				// The NetworkManager closed the channel.
 				player.Connection.Close(writeWait, true)
 				return
 			}
 
-			err := player.Connection.Write(writeWait, message)
+			err := player.Connection.Write(message)
 			if err != nil {
 				return
 			}
 		case <-ticker.C:
 			player.Connection.Ping(writeWait)
 		}
+	}
+}
+
+// Reader constantly reads messages from the websocket connection and passes them to the NetworkManager.
+//
+// The application runs reader in a per-connection goroutine. The application
+// ensures that there is at most one reader on a connection by executing all
+// reads from this goroutine.
+func (n *NetworkManager) reader(player *model.Player) {
+	defer func() {
+		n.unregister <- player
+		player.Connection.Close(writeWait, false)
+	}()
+	player.Connection.PrepareRead(maxMessageSize, pongWait)
+	for {
+		message, err := player.Connection.Read()
+		if err != nil {
+			// TODO: handle properly
+			break
+		}
+		// TODO: pass to protocol handler
+		fmt.Println(message)
+		// then update player state
 	}
 }
