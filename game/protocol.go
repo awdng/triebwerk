@@ -61,39 +61,33 @@ func decode(data []byte, p *model.Player) {
 }
 
 func decodePlayerInput(data []byte, p *model.Player) {
-	if uint8(data[2]) > 0 {
+	p.Control.Forward = false
+	p.Control.Backward = false
+	p.Control.Left = false
+	p.Control.Right = false
+	p.Control.TurretRight = false
+	p.Control.TurretLeft = false
+	p.Control.Shoot = false
+
+	if uint8(data[2]) == 1 {
 		p.Control.Forward = true
-	} else {
-		p.Control.Forward = false
 	}
-	if uint8(data[3]) > 0 {
+	if uint8(data[3]) == 1 {
 		p.Control.Backward = true
-	} else {
-		p.Control.Backward = false
 	}
-	if uint8(data[4]) > 0 {
+	if uint8(data[4]) == 1 {
 		p.Control.Left = true
-	} else {
-		p.Control.Left = false
 	}
-	if uint8(data[5]) > 0 {
+	if uint8(data[5]) == 1 {
 		p.Control.Right = true
-	} else {
-		p.Control.Right = false
 	}
-	if uint8(data[6]) > 0 {
+	if uint8(data[6]) == 1 {
 		p.Control.TurretRight = true
-	} else {
-		p.Control.TurretRight = false
 	}
-	if uint8(data[7]) > 0 {
+	if uint8(data[7]) == 1 {
 		p.Control.TurretLeft = true
-	} else {
-		p.Control.TurretLeft = false
 	}
-	if uint8(data[8]) > 0 {
+	if uint8(data[8]) == 1 {
 		p.Control.Shoot = true
-	} else {
-		p.Control.Shoot = false
 	}
 }
