@@ -2,6 +2,7 @@ package game
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
@@ -70,10 +71,12 @@ func NewNetworkManager(transport Transport, protocol Protocol) *NetworkManager {
 // Start handling network connections
 func (n *NetworkManager) Start() error {
 	n.transport.Init()
+	go n.run()
 	return n.transport.Run()
 }
 
 func (n *NetworkManager) run() {
+	log.Printf("Listening for incoming Network traffic ...")
 	for {
 		select {
 		case client := <-n.register:
