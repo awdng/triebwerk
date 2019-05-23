@@ -2,12 +2,9 @@ package game
 
 import (
 	"fmt"
-	"log"
-	"net/http"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
-	"github.com/gorilla/websocket"
 )
 
 const (
@@ -30,11 +27,20 @@ type Protocol interface {
 	Decode(data []byte, p *model.Player)
 }
 
+// Transport represents the network context
+type Transport interface {
+	Init()
+	Run() error
+}
+
 // NetworkManager maintains the set of active clients and broadcasts messages to the
 // clients.
 type NetworkManager struct {
-	// that encodes/decodes data for network transfer
-	Protocol Protocol
+	// network context eg. websockets
+	transport Transport
+
+	// protocol that encodes/decodes data for network transfer
+	protocol Protocol
 
 	// Registered clients.
 	clients map[*model.Player]bool
@@ -49,19 +55,11 @@ type NetworkManager struct {
 	unregister chan *model.Player
 }
 
-// TODO: move to websocket package
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
-
 // NewNetworkManager ...
-func NewNetworkManager(protocol Protocol) *NetworkManager {
+func NewNetworkManager(transport Transport, protocol Protocol) *NetworkManager {
 	return &NetworkManager{
-		Protocol:   protocol,
+		transport:  transport,
+		protocol:   protocol,
 		broadcast:  make(chan []byte),
 		register:   make(chan *model.Player),
 		unregister: make(chan *model.Player),
@@ -69,14 +67,10 @@ func NewNetworkManager(protocol Protocol) *NetworkManager {
 	}
 }
 
-// Serve handles connections
-func (n *NetworkManager) Serve(w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	fmt.Println(conn)
+// Start handling network connections
+func (n *NetworkManager) Start() error {
+	n.transport.Init()
+	return n.transport.Run()
 }
 
 func (n *NetworkManager) run() {
@@ -181,6 +175,6 @@ func (n *NetworkManager) reader(player *model.Player) {
 			break
 		}
 		// update player state
-		n.Protocol.Decode(message, player)
+		n.protocol.Decode(message, player)
 	}
 }

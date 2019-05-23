@@ -1,6 +1,9 @@
 package websocket
 
 import (
+	"fmt"
+	"log"
+	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -9,6 +12,43 @@ import (
 // Connection represents a websocket connection
 type Connection struct {
 	conn *websocket.Conn
+}
+
+// Transport represents the websocket context
+type Transport struct {
+	upgrader websocket.Upgrader
+}
+
+// NewTransport creates the websocket context
+func NewTransport() *Transport {
+	return &Transport{
+		upgrader: websocket.Upgrader{
+			ReadBufferSize:  1024,
+			WriteBufferSize: 1024,
+			CheckOrigin: func(r *http.Request) bool {
+				return true
+			},
+		},
+	}
+}
+
+// Init ...
+func (t *Transport) Init() {
+	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := t.upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Println(err)
+			return
+		}
+		fmt.Println(conn)
+		fmt.Println("test websocket connection")
+	})
+}
+
+// Run ...
+func (t *Transport) Run() error {
+	log.Printf("Starting Triebwerk Websocket Server on Port %s...", "8080")
+	return http.ListenAndServe(":8080", nil)
 }
 
 // NewConnection creates a new connection
