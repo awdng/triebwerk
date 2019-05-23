@@ -1,6 +1,8 @@
 package model
 
-import "time"
+import (
+	"time"
+)
 
 // Connection represents the network connection of the player
 type Connection interface {

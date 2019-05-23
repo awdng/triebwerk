@@ -1,20 +1,10 @@
 package websocket
 
 import (
-	"log"
-	"net/http"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
-
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
 
 // Connection represents a websocket connection
 type Connection struct {
@@ -48,7 +38,7 @@ func (c *Connection) PrepareRead(maxMessageSize int64, pongWait time.Duration) {
 
 // Read from the network connection
 func (c *Connection) Read() ([]byte, error) {
-	messageType, message, err := c.conn.ReadMessage()
+	_, message, err := c.conn.ReadMessage()
 	if err != nil {
 		if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 			// TODO: wrap in another error
@@ -84,15 +74,6 @@ func (c *Connection) Write(data []byte) error {
 func (c *Connection) Ping(writeWait time.Duration) {
 	c.conn.SetWriteDeadline(time.Now().Add(writeWait))
 	if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-		return
-	}
-}
-
-// ServeWs handles websocket requests from the peer.
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request) {
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
 		return
 	}
 }

@@ -1,17 +1,21 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
-	websocket "github.com/awdng/triebwerk/transport"
+	"github.com/awdng/triebwerk/game"
+	"github.com/awdng/triebwerk/protocol"
 )
 
 func main() {
+	networkManager := game.NewNetworkManager(protocol.NewBinaryProtocol())
 	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-		websocket.ServeWs(hub, w, r)
+		networkManager.Serve(w, r)
+		fmt.Println("test websocket endpoint called")
 	})
 
-	log.Printf("Starting Http Server on Port %s...", "8080")
+	log.Printf("Starting Triebwerk on Port %s...", "8080")
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }

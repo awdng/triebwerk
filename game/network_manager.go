@@ -2,9 +2,12 @@ package game
 
 import (
 	"fmt"
+	"log"
+	"net/http"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
+	"github.com/gorilla/websocket"
 )
 
 const (
@@ -21,11 +24,17 @@ const (
 	maxMessageSize = 512
 )
 
+// Protocol that encodes/decodes data for network transfer
+type Protocol interface {
+	Encode(p *model.Player, currentGameTime uint32, messageType int8) []byte
+	Decode(data []byte, p *model.Player)
+}
+
 // NetworkManager maintains the set of active clients and broadcasts messages to the
 // clients.
 type NetworkManager struct {
-	// The Network transport layer
-	transport Transport
+	// that encodes/decodes data for network transfer
+	Protocol Protocol
 
 	// Registered clients.
 	clients map[*model.Player]bool
@@ -40,19 +49,34 @@ type NetworkManager struct {
 	unregister chan *model.Player
 }
 
-// Transport defines the network transport interface
-type Transport interface {
+// TODO: move to websocket package
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
 // NewNetworkManager ...
-func NewNetworkManager(transport Transport) *NetworkManager {
+func NewNetworkManager(protocol Protocol) *NetworkManager {
 	return &NetworkManager{
-		transport:  transport,
+		Protocol:   protocol,
 		broadcast:  make(chan []byte),
 		register:   make(chan *model.Player),
 		unregister: make(chan *model.Player),
 		clients:    make(map[*model.Player]bool),
 	}
+}
+
+// Serve handles connections
+func (n *NetworkManager) Serve(w http.ResponseWriter, r *http.Request) {
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	fmt.Println(conn)
 }
 
 func (n *NetworkManager) run() {
@@ -84,12 +108,17 @@ func (n *NetworkManager) Register(player *model.Player) {
 }
 
 // Send data to a client
-func (n *NetworkManager) Send(player *model.Player, buffer []byte) error {
+func (n *NetworkManager) Send(player *model.Player, message []byte) error {
 	if _, ok := n.clients[player]; !ok {
 		return fmt.Errorf("Client not found %d", player.ID)
 	}
 
-	player.NetworkOut <- buffer
+	// TODO: implement ecoding of player state
+	// Message needs to receive a struct that is encoded before sending to networkOut
+	// struct needs to include MessageType
+	//n.Protocol.Encode(player, ...)
+
+	player.NetworkOut <- message
 	return nil
 }
 
@@ -151,8 +180,7 @@ func (n *NetworkManager) reader(player *model.Player) {
 			// TODO: handle properly
 			break
 		}
-		// TODO: pass to protocol handler
-		fmt.Println(message)
-		// then update player state
+		// update player state
+		n.Protocol.Decode(message, player)
 	}
 }
