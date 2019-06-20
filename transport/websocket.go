@@ -1,11 +1,11 @@
 package websocket
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"time"
 
+	"github.com/awdng/triebwerk/model"
 	"github.com/gorilla/websocket"
 )
 
@@ -17,6 +17,7 @@ type Connection struct {
 // Transport represents the websocket context
 type Transport struct {
 	upgrader websocket.Upgrader
+	register chan model.Connection
 }
 
 // NewTransport creates the websocket context
@@ -29,20 +30,26 @@ func NewTransport() *Transport {
 				return true
 			},
 		},
+		register: make(chan model.Connection),
 	}
 }
 
 // Init ...
 func (t *Transport) Init() {
 	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-		conn, err := t.upgrader.Upgrade(w, r, nil)
+		ws, err := t.upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			log.Println(err)
 			return
 		}
-		fmt.Println(conn)
-		fmt.Println("test websocket connection")
+		conn := NewConnection(ws)
+		t.register <- conn
 	})
+}
+
+// Register ...
+func (t *Transport) Register() chan model.Connection {
+	return t.register
 }
 
 // Run ...
@@ -52,8 +59,10 @@ func (t *Transport) Run() error {
 }
 
 // NewConnection creates a new connection
-func NewConnection() *Connection {
-	return &Connection{}
+func NewConnection(conn *websocket.Conn) *Connection {
+	return &Connection{
+		conn: conn,
+	}
 }
 
 // Close sends the websocket CloseMessage

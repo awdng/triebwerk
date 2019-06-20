@@ -32,6 +32,7 @@ type Protocol interface {
 type Transport interface {
 	Init()
 	Run() error
+	Register() chan model.Connection
 }
 
 // NetworkManager maintains the set of active clients and broadcasts messages to the
@@ -76,11 +77,16 @@ func (n *NetworkManager) Start() error {
 }
 
 func (n *NetworkManager) run() {
+	pm := NewPlayerManager()
 	log.Printf("Listening for incoming Network traffic ...")
 	for {
 		select {
-		case client := <-n.register:
-			n.clients[client] = true
+		case client := <-n.transport.Register():
+			player := pm.NewPlayer(0, 10, 10, client)
+			n.clients[player] = true
+
+			go n.writer(player)
+			go n.reader(player)
 		case client := <-n.unregister:
 			if _, ok := n.clients[client]; ok {
 				client.Disconnect()
@@ -110,22 +116,12 @@ func (n *NetworkManager) Send(player *model.Player, message []byte) error {
 		return fmt.Errorf("Client not found %d", player.ID)
 	}
 
-	// TODO: implement ecoding of player state
+	// TODO: implement encoding of player state
 	// Message needs to receive a struct that is encoded before sending to networkOut
 	// struct needs to include MessageType
 	//n.Protocol.Encode(player, ...)
 
 	player.NetworkOut <- message
-	return nil
-}
-
-// StartWriter starts the network writer for a player in a goroutine
-func (n *NetworkManager) StartWriter(player *model.Player) error {
-	if _, ok := n.clients[player]; !ok {
-		return fmt.Errorf("Client not found %d", player.ID)
-	}
-
-	go n.writer(player)
 	return nil
 }
 
@@ -174,7 +170,7 @@ func (n *NetworkManager) reader(player *model.Player) {
 	for {
 		message, err := player.Connection.Read()
 		if err != nil {
-			// TODO: handle properly
+			// connection will be closed
 			break
 		}
 		// update player state

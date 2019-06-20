@@ -15,10 +15,11 @@ func NewPlayerManager() *PlayerManager {
 }
 
 // NewPlayer creates a new player object
-func (p *PlayerManager) NewPlayer(id int, x float32, y float32) *model.Player {
+func (p *PlayerManager) NewPlayer(id int, x float32, y float32, conn model.Connection) *model.Player {
 	return &model.Player{
 		ID:         id,
 		NetworkOut: make(chan []byte),
 		Collider:   model.NewRectCollider(x, y, width, depth),
+		Connection: conn,
 	}
 }
