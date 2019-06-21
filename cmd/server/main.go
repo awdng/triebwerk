@@ -10,6 +10,13 @@ import (
 
 func main() {
 	log.Printf("Loading Triebwerk ...")
-	networkManager := game.NewNetworkManager(websocket.NewTransport(), protocol.NewBinaryProtocol())
-	log.Fatal(networkManager.Start())
+
+	playerManager := game.NewPlayerManager()
+	transport := websocket.NewTransport()
+	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
+	gameManager := game.NewGame(networkManager, playerManager)
+	transport.RegisterNewConnHandler(gameManager.RegisterPlayer)
+
+	// start game server
+	log.Fatal(gameManager.Start())
 }

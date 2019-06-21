@@ -17,7 +17,7 @@ type Connection struct {
 // Transport represents the websocket context
 type Transport struct {
 	upgrader websocket.Upgrader
-	register chan model.Connection
+	register func(conn model.Connection)
 }
 
 // NewTransport creates the websocket context
@@ -30,8 +30,12 @@ func NewTransport() *Transport {
 				return true
 			},
 		},
-		register: make(chan model.Connection),
 	}
+}
+
+// RegisterNewConnHandler is a callback for new connections
+func (t *Transport) RegisterNewConnHandler(register func(conn model.Connection)) {
+	t.register = register
 }
 
 // Init ...
@@ -43,13 +47,8 @@ func (t *Transport) Init() {
 			return
 		}
 		conn := NewConnection(ws)
-		t.register <- conn
+		t.register(conn)
 	})
-}
-
-// Register ...
-func (t *Transport) Register() chan model.Connection {
-	return t.register
 }
 
 // Run ...

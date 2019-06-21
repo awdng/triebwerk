@@ -32,7 +32,7 @@ type Protocol interface {
 type Transport interface {
 	Init()
 	Run() error
-	Register() chan model.Connection
+	RegisterNewConnHandler(register func(conn model.Connection))
 }
 
 // NetworkManager maintains the set of active clients and broadcasts messages to the
@@ -77,16 +77,13 @@ func (n *NetworkManager) Start() error {
 }
 
 func (n *NetworkManager) run() {
-	pm := NewPlayerManager()
 	log.Printf("Listening for incoming Network traffic ...")
 	for {
 		select {
-		case client := <-n.transport.Register():
-			player := pm.NewPlayer(0, 10, 10, client)
-			n.clients[player] = true
-
-			go n.writer(player)
-			go n.reader(player)
+		case client := <-n.register:
+			n.clients[client] = true
+			go n.writer(client)
+			go n.reader(client)
 		case client := <-n.unregister:
 			if _, ok := n.clients[client]; ok {
 				client.Disconnect()
@@ -175,5 +172,6 @@ func (n *NetworkManager) reader(player *model.Player) {
 		}
 		// update player state
 		n.protocol.Decode(message, player)
+		fmt.Println(player.Control)
 	}
 }
