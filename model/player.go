@@ -27,7 +27,7 @@ type Controls struct {
 
 // Player ...
 type Player struct {
-	ID         int
+	ID         uint8
 	Control    Controls
 	Collider   RectCollider
 	NetworkOut chan []byte

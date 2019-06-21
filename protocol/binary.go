@@ -45,7 +45,7 @@ func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageT
 
 // Decode player inputs
 func (b BinaryProtocol) Decode(data []byte, p *model.Player) {
-	p.ID = int(data[0])
+	p.ID = uint8(data[0])
 	messageType := int8(data[1])
 
 	if decodeHandler, ok := b.decodeHandlers[messageType]; ok {

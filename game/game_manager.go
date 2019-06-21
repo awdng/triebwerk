@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
@@ -15,6 +14,7 @@ type Game struct {
 	startTime      time.Time
 	networkManager *NetworkManager
 	playerManager  *PlayerManager
+	state          model.GameState
 }
 
 // NewGame creates a game instance
@@ -23,6 +23,9 @@ func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game
 		startTime:      time.Now(),
 		networkManager: networkManager,
 		playerManager:  playerManager,
+		state: model.GameState{
+			Players: make(map[uint8]*model.Player),
+		},
 	}
 }
 
@@ -34,8 +37,10 @@ func (g *Game) GameTime() uint32 {
 
 // RegisterPlayer registers a networked Player
 func (g *Game) RegisterPlayer(conn model.Connection) {
-	player := g.playerManager.NewPlayer(0, 10, 10, conn)
+	g.state.PlayerCount++
+	player := g.playerManager.NewPlayer(g.state.PlayerCount, 10, 10, conn)
 	g.networkManager.Register(player)
+	g.state.Players[g.state.PlayerCount] = player
 }
 
 // Start the server update loop
@@ -45,7 +50,9 @@ func (g *Game) Start() error {
 		ticker := time.NewTicker(1000 / tickrate * time.Millisecond)
 		for range ticker.C {
 			g.tickStart = time.Now()
-			fmt.Println("Game loop iteration")
+
+			// broadcast game state to clients
+			g.networkManager.BroadcastGameState(g.state)
 		}
 	}()
 

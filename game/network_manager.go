@@ -35,6 +35,12 @@ type Transport interface {
 	RegisterNewConnHandler(register func(conn model.Connection))
 }
 
+// Client represents a network client
+type Client struct {
+	NetworkOut chan []byte
+	Connection model.Connection
+}
+
 // NetworkManager maintains the set of active clients and broadcasts messages to the
 // clients.
 type NetworkManager struct {
@@ -82,10 +88,12 @@ func (n *NetworkManager) run() {
 		select {
 		case client := <-n.register:
 			n.clients[client] = true
+			fmt.Println("Player connected")
 			go n.writer(client)
 			go n.reader(client)
 		case client := <-n.unregister:
 			if _, ok := n.clients[client]; ok {
+				fmt.Println("Player disconnected")
 				client.Disconnect()
 				delete(n.clients, client)
 			}
@@ -120,6 +128,17 @@ func (n *NetworkManager) Send(player *model.Player, message []byte) error {
 
 	player.NetworkOut <- message
 	return nil
+}
+
+// BroadcastGameState ...
+func (n *NetworkManager) BroadcastGameState(state model.GameState) {
+	buf := make([]byte, 0)
+	for _, p := range state.Players {
+		buf = append(buf, n.protocol.Encode(p, 0, 1)...)
+	}
+	if len(buf) > 0 {
+		n.broadcast <- buf
+	}
 }
 
 // Writer constantly reads messages from the players NetworkOut and sends it to the websocket connection.
@@ -167,6 +186,7 @@ func (n *NetworkManager) reader(player *model.Player) {
 	for {
 		message, err := player.Connection.Read()
 		if err != nil {
+			fmt.Println(err)
 			// connection will be closed
 			break
 		}
