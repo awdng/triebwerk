@@ -35,12 +35,6 @@ type Transport interface {
 	RegisterNewConnHandler(register func(conn model.Connection))
 }
 
-// Client represents a network client
-type Client struct {
-	NetworkOut chan []byte
-	Connection model.Connection
-}
-
 // NetworkManager maintains the set of active clients and broadcasts messages to the
 // clients.
 type NetworkManager struct {
@@ -51,16 +45,16 @@ type NetworkManager struct {
 	protocol Protocol
 
 	// Registered clients.
-	clients map[*model.Player]bool
+	clients map[*model.Client]bool
 
 	// Inbound messages from the clients.
 	broadcast chan []byte
 
 	// Register requests from the clients.
-	register chan *model.Player
+	register chan *model.Client
 
 	// Unregister requests from clients.
-	unregister chan *model.Player
+	unregister chan *model.Client
 }
 
 // NewNetworkManager ...
@@ -69,9 +63,9 @@ func NewNetworkManager(transport Transport, protocol Protocol) *NetworkManager {
 		transport:  transport,
 		protocol:   protocol,
 		broadcast:  make(chan []byte),
-		register:   make(chan *model.Player),
-		unregister: make(chan *model.Player),
-		clients:    make(map[*model.Player]bool),
+		register:   make(chan *model.Client),
+		unregister: make(chan *model.Client),
+		clients:    make(map[*model.Client]bool),
 	}
 }
 
@@ -88,14 +82,16 @@ func (n *NetworkManager) run() {
 		select {
 		case client := <-n.register:
 			n.clients[client] = true
-			fmt.Println("Player connected")
+			fmt.Println("Client connected")
+			fmt.Println(n.clients)
 			go n.writer(client)
 			go n.reader(client)
 		case client := <-n.unregister:
 			if _, ok := n.clients[client]; ok {
-				fmt.Println("Player disconnected")
+				fmt.Println("Client disconnected")
 				client.Disconnect()
 				delete(n.clients, client)
+				fmt.Println(n.clients)
 			}
 		case message := <-n.broadcast:
 			for client := range n.clients {
@@ -110,15 +106,15 @@ func (n *NetworkManager) run() {
 	}
 }
 
-// Register a new Player with the NetworkService
-func (n *NetworkManager) Register(player *model.Player) {
-	n.register <- player
+// Register a new CLient with the NetworkService
+func (n *NetworkManager) Register(client *model.Client) {
+	n.register <- client
 }
 
 // Send data to a client
-func (n *NetworkManager) Send(player *model.Player, message []byte) error {
-	if _, ok := n.clients[player]; !ok {
-		return fmt.Errorf("Client not found %d", player.ID)
+func (n *NetworkManager) Send(client *model.Client, message []byte) error {
+	if _, ok := n.clients[client]; !ok {
+		return fmt.Errorf("Client not found %d", client.Connection)
 	}
 
 	// TODO: implement encoding of player state
@@ -126,7 +122,7 @@ func (n *NetworkManager) Send(player *model.Player, message []byte) error {
 	// struct needs to include MessageType
 	//n.Protocol.Encode(player, ...)
 
-	player.NetworkOut <- message
+	client.NetworkOut <- message
 	return nil
 }
 
@@ -137,7 +133,7 @@ func (n *NetworkManager) BroadcastGameState(state model.GameState) {
 		buf = append(buf, n.protocol.Encode(p, 0, 1)...)
 	}
 	if len(buf) > 0 {
-		n.broadcast <- buf
+		// n.broadcast <- buf
 	}
 }
 
@@ -146,28 +142,28 @@ func (n *NetworkManager) BroadcastGameState(state model.GameState) {
 // A goroutine running Writer is started for each connection. The
 // application ensures that there is at most one writer to a connection by
 // executing all writes from this goroutine.
-func (n *NetworkManager) writer(player *model.Player) {
+func (n *NetworkManager) writer(client *model.Client) {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		player.Connection.Close(writeWait, false)
+		client.Connection.Close(writeWait, false)
 	}()
 	for {
 		select {
-		case message, ok := <-player.NetworkOut:
-			player.Connection.PrepareWrite(writeWait)
+		case message, ok := <-client.NetworkOut:
+			client.Connection.PrepareWrite(writeWait)
 			if !ok {
 				// The NetworkManager closed the channel.
-				player.Connection.Close(writeWait, true)
+				client.Connection.Close(writeWait, true)
 				return
 			}
 
-			err := player.Connection.Write(message)
+			err := client.Connection.Write(message)
 			if err != nil {
 				return
 			}
 		case <-ticker.C:
-			player.Connection.Ping(writeWait)
+			client.Connection.Ping(writeWait)
 		}
 	}
 }
@@ -177,21 +173,21 @@ func (n *NetworkManager) writer(player *model.Player) {
 // The application runs reader in a per-connection goroutine. The application
 // ensures that there is at most one reader on a connection by executing all
 // reads from this goroutine.
-func (n *NetworkManager) reader(player *model.Player) {
+func (n *NetworkManager) reader(client *model.Client) {
 	defer func() {
-		n.unregister <- player
-		player.Connection.Close(writeWait, false)
+		n.unregister <- client
+		client.Connection.Close(writeWait, false)
 	}()
-	player.Connection.PrepareRead(maxMessageSize, pongWait)
+	client.Connection.PrepareRead(maxMessageSize, pongWait)
 	for {
-		message, err := player.Connection.Read()
+		message, err := client.Connection.Read()
 		if err != nil {
 			fmt.Println(err)
 			// connection will be closed
 			break
 		}
 		// update player state
-		n.protocol.Decode(message, player)
-		fmt.Println(player.Control)
+		// n.protocol.Decode(message, player)
+		fmt.Println(message)
 	}
 }

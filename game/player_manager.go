@@ -17,9 +17,11 @@ func NewPlayerManager() *PlayerManager {
 // NewPlayer creates a new player object
 func (p *PlayerManager) NewPlayer(id uint8, x float32, y float32, conn model.Connection) *model.Player {
 	return &model.Player{
-		ID:         id,
-		NetworkOut: make(chan []byte),
-		Collider:   model.NewRectCollider(x, y, width, depth),
-		Connection: conn,
+		ID:       id,
+		Collider: model.NewRectCollider(x, y, width, depth),
+		Client: &model.Client{
+			NetworkOut: make(chan []byte),
+			Connection: conn,
+		},
 	}
 }

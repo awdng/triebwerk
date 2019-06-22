@@ -27,14 +27,19 @@ type Controls struct {
 
 // Player ...
 type Player struct {
-	ID         uint8
-	Control    Controls
-	Collider   RectCollider
+	ID       uint8
+	Control  Controls
+	Collider RectCollider
+	Client   *Client
+}
+
+// Client represents a network client
+type Client struct {
 	NetworkOut chan []byte
 	Connection Connection
 }
 
-// Disconnect player from the network
-func (p *Player) Disconnect() {
-	close(p.NetworkOut)
+// Disconnect Client from the network
+func (c *Client) Disconnect() {
+	close(c.NetworkOut)
 }

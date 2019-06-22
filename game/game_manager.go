@@ -39,7 +39,7 @@ func (g *Game) GameTime() uint32 {
 func (g *Game) RegisterPlayer(conn model.Connection) {
 	g.state.PlayerCount++
 	player := g.playerManager.NewPlayer(g.state.PlayerCount, 10, 10, conn)
-	g.networkManager.Register(player)
+	g.networkManager.Register(player.Client)
 	g.state.Players[g.state.PlayerCount] = player
 }
 
