@@ -128,9 +128,10 @@ func (n *NetworkManager) Send(client *model.Client, message []byte) error {
 func (n *NetworkManager) BroadcastGameState(state model.GameState) {
 	buf := make([]byte, 0)
 	for _, p := range state.Players {
-		buf = append(buf, n.protocol.Encode(p, 0, 1)...)
+		buf = append(buf, n.protocol.Encode(p, state.GameTime(), 1)...)
 	}
 	if len(buf) > 0 {
+		fmt.Println(buf)
 		n.broadcast <- buf
 	}
 }

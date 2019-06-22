@@ -6,12 +6,11 @@ import (
 	"github.com/awdng/triebwerk/model"
 )
 
-const tickrate = 60
+const tickrate = 5
 
 // Game represents the game state
 type Game struct {
 	tickStart      time.Time
-	startTime      time.Time
 	networkManager *NetworkManager
 	playerManager  *PlayerManager
 	state          model.GameState
@@ -20,36 +19,34 @@ type Game struct {
 // NewGame creates a game instance
 func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game {
 	return &Game{
-		startTime:      time.Now(),
 		networkManager: networkManager,
 		playerManager:  playerManager,
 		state: model.GameState{
-			Players: make(map[uint8]*model.Player),
+			StartTime: time.Now(),
+			Players:   make(map[uint8]*model.Player),
 		},
 	}
-}
-
-// GameTime returns the current game time since start in milliseconds
-// TODO: review return type
-func (g *Game) GameTime() uint32 {
-	return uint32(time.Now().Sub(g.startTime) / time.Millisecond)
 }
 
 // RegisterPlayer registers a networked Player
 func (g *Game) RegisterPlayer(conn model.Connection) {
 	g.state.PlayerCount++
-	player := g.playerManager.NewPlayer(g.state.PlayerCount, 10, 10, conn)
+	player := g.playerManager.NewPlayer(g.state.PlayerCount, 10*float32(g.state.PlayerCount), 10, conn)
 	g.networkManager.Register(player.Client)
 	g.state.Players[g.state.PlayerCount] = player
 }
 
 // Start the server update loop
 func (g *Game) Start() error {
-	// Execute game loop in a goroutine
+	// Execute game loop
 	go func() {
 		ticker := time.NewTicker(1000 / tickrate * time.Millisecond)
 		for range ticker.C {
 			g.tickStart = time.Now()
+
+			if len(g.state.Players) == 0 {
+				continue
+			}
 
 			// read client inputs
 			for _, p := range g.state.Players {

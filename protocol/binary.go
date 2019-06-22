@@ -38,7 +38,7 @@ func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageT
 	buf = append(buf, currentTime...)
 
 	if encodeHandler, ok := b.encodeHandlers[messageType]; ok {
-		encodeHandler(p, buf)
+		buf = append(buf, encodeHandler(p, buf)...)
 	}
 
 	return buf
