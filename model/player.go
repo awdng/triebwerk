@@ -12,6 +12,7 @@ type Connection interface {
 	Write(data []byte) error
 	PrepareRead(maxMessageSize int64, pongWait time.Duration)
 	Read() ([]byte, error)
+	Identifier() string
 }
 
 // Controls ...
@@ -33,13 +34,99 @@ type Player struct {
 	Client   *Client
 }
 
+// ApplyMovement applies the movement input
+func (p *Player) ApplyMovement(controls Controls) {
+	r := p.Collider
+
+	dt := float32(0.033)
+	r.Velocity -= float32(15*1.5) * dt
+	if r.Velocity < 0 {
+		r.Velocity = 0
+	}
+
+	if controls.Right {
+		r.Rotation += 1.5 * dt
+		r.TurretRotation += 1.5 * dt
+	}
+
+	if controls.Left {
+		r.Rotation -= 1.5 * dt
+		r.TurretRotation -= 1.5 * dt
+	}
+
+	if controls.TurretRight {
+		r.TurretRotation -= 1.5 * dt
+	}
+
+	if controls.TurretLeft {
+		r.TurretRotation += 1.5 * dt
+	}
+
+	rotationDelta := r.Rotation - r.LastRotation
+	turretRotationDelta := r.TurretRotation - r.TurretLastRotation
+	//r.Rotation = NormalizeAngle(float64(r.Rotation))
+	//r.TurretRotation = NormalizeAngle(float64(r.TurretRotation))
+
+	r.rotateRectPoint(rotationDelta, r.Rect.A)
+	r.rotateRectPoint(rotationDelta, r.Rect.B)
+	r.rotateRectPoint(rotationDelta, r.Rect.C)
+	r.rotateRectPoint(rotationDelta, r.Rect.D)
+
+	r.rotateRectPoint(rotationDelta, r.Look)
+	r.rotateRectPoint(turretRotationDelta, r.Turret)
+	r.CalcDirection()
+
+	movement := 0
+	if controls.Forward && !r.CollisionFront {
+		movement = 1
+		r.Velocity += 15 * dt
+	}
+	if controls.Backward && !r.CollisionBack {
+		movement = -1
+		r.Velocity -= 15 * dt
+	}
+
+	if movement != 0 {
+		r.Rect.A.X += r.Dir.X * r.Velocity
+		r.Rect.A.Y += r.Dir.Y * r.Velocity
+
+		r.Rect.B.X += r.Dir.X * r.Velocity
+		r.Rect.B.Y += r.Dir.Y * r.Velocity
+
+		r.Rect.C.X += r.Dir.X * r.Velocity
+		r.Rect.C.Y += r.Dir.Y * r.Velocity
+
+		r.Rect.D.X += r.Dir.X * r.Velocity
+		r.Rect.D.Y += r.Dir.Y * r.Velocity
+
+		r.Pivot.X += r.Dir.X * r.Velocity
+		r.Pivot.Y += r.Dir.Y * r.Velocity
+
+		r.Look.X += r.Dir.X * r.Velocity
+		r.Look.Y += r.Dir.Y * r.Velocity
+
+		r.Turret.X += r.Dir.X * r.Velocity
+		r.Turret.Y += r.Dir.Y * r.Velocity
+	}
+	r.LastRotation = r.Rotation
+	r.TurretLastRotation = r.TurretRotation
+	p.Control = controls
+}
+
 // Client represents a network client
 type Client struct {
 	NetworkOut chan []byte
+	NetworkIn  chan NetworkMessage
 	Connection Connection
 }
 
 // Disconnect Client from the network
 func (c *Client) Disconnect() {
 	close(c.NetworkOut)
+}
+
+// NetworkMessage represents an network message from or to a Client
+type NetworkMessage struct {
+	MessageType uint8
+	Body        interface{}
 }

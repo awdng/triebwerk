@@ -51,6 +51,12 @@ func (g *Game) Start() error {
 		for range ticker.C {
 			g.tickStart = time.Now()
 
+			// read client inputs
+			for _, p := range g.state.Players {
+				message := <-p.Client.NetworkIn
+				p.ApplyMovement(message.Body.(model.Controls))
+			}
+
 			// broadcast game state to clients
 			g.networkManager.BroadcastGameState(g.state)
 		}

@@ -1,6 +1,7 @@
 package websocket
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"time"
@@ -8,11 +9,6 @@ import (
 	"github.com/awdng/triebwerk/model"
 	"github.com/gorilla/websocket"
 )
-
-// Connection represents a websocket connection
-type Connection struct {
-	conn *websocket.Conn
-}
 
 // Transport represents the websocket context
 type Transport struct {
@@ -57,11 +53,21 @@ func (t *Transport) Run() error {
 	return http.ListenAndServe(":8080", nil)
 }
 
+// Connection represents a websocket connection
+type Connection struct {
+	conn *websocket.Conn
+}
+
 // NewConnection creates a new connection
 func NewConnection(conn *websocket.Conn) *Connection {
 	return &Connection{
 		conn: conn,
 	}
+}
+
+// Identifier of the connection
+func (c *Connection) Identifier() string {
+	return fmt.Sprintf("%s - %s", c.conn.RemoteAddr().Network(), c.conn.RemoteAddr().String())
 }
 
 // Close sends the websocket CloseMessage
@@ -103,7 +109,6 @@ func (c *Connection) PrepareWrite(writeWait time.Duration) {
 
 // Write to the network connection
 func (c *Connection) Write(data []byte) error {
-	c.conn.WriteMessage(websocket.CloseMessage, data)
 	writer, err := c.conn.NextWriter(websocket.BinaryMessage)
 	if err != nil {
 		return err

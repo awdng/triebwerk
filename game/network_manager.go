@@ -24,8 +24,8 @@ const (
 
 // Protocol that encodes/decodes data for network transfer
 type Protocol interface {
-	Encode(p *model.Player, currentGameTime uint32, messageType int8) []byte
-	Decode(data []byte, p *model.Player)
+	Encode(p *model.Player, currentGameTime uint32, messageType uint8) []byte
+	Decode(data []byte) model.NetworkMessage
 }
 
 // Transport represents the network context
@@ -82,16 +82,14 @@ func (n *NetworkManager) run() {
 		select {
 		case client := <-n.register:
 			n.clients[client] = true
-			fmt.Println("Client connected")
-			fmt.Println(n.clients)
 			go n.writer(client)
 			go n.reader(client)
+			log.Printf("Client %s connected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
 		case client := <-n.unregister:
 			if _, ok := n.clients[client]; ok {
-				fmt.Println("Client disconnected")
 				client.Disconnect()
 				delete(n.clients, client)
-				fmt.Println(n.clients)
+				log.Printf("Client %s disconnected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
 			}
 		case message := <-n.broadcast:
 			for client := range n.clients {
@@ -133,7 +131,7 @@ func (n *NetworkManager) BroadcastGameState(state model.GameState) {
 		buf = append(buf, n.protocol.Encode(p, 0, 1)...)
 	}
 	if len(buf) > 0 {
-		// n.broadcast <- buf
+		n.broadcast <- buf
 	}
 }
 
@@ -182,12 +180,10 @@ func (n *NetworkManager) reader(client *model.Client) {
 	for {
 		message, err := client.Connection.Read()
 		if err != nil {
-			fmt.Println(err)
 			// connection will be closed
 			break
 		}
-		// update player state
-		// n.protocol.Decode(message, player)
-		fmt.Println(message)
+
+		client.NetworkIn <- n.protocol.Decode(message)
 	}
 }

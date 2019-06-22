@@ -9,14 +9,15 @@ import (
 
 // BinaryProtocol ...
 type BinaryProtocol struct {
-	encodeHandlers map[int8]func(p *model.Player, buf []byte) []byte
-	decodeHandlers map[int8]func(data []byte, p *model.Player)
+	encodeHandlers map[uint8]func(p *model.Player, buf []byte) []byte
+	decodeHandlers map[uint8]func(data []byte, message *model.NetworkMessage)
 }
 
+// NewBinaryProtocol ...
 func NewBinaryProtocol() BinaryProtocol {
 	protocol := BinaryProtocol{
-		encodeHandlers: make(map[int8]func(p *model.Player, buf []byte) []byte),
-		decodeHandlers: make(map[int8]func(data []byte, p *model.Player)),
+		encodeHandlers: make(map[uint8]func(p *model.Player, buf []byte) []byte),
+		decodeHandlers: make(map[uint8]func(data []byte, message *model.NetworkMessage)),
 	}
 
 	// register Handlers by messageType
@@ -27,7 +28,7 @@ func NewBinaryProtocol() BinaryProtocol {
 }
 
 // Encode the current player state
-func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageType int8) []byte {
+func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageType uint8) []byte {
 	buf := make([]byte, 0)
 	buf = append(buf, byte(p.ID))
 	buf = append(buf, byte(messageType))
@@ -44,13 +45,16 @@ func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageT
 }
 
 // Decode player inputs
-func (b BinaryProtocol) Decode(data []byte, p *model.Player) {
-	p.ID = uint8(data[0])
-	messageType := int8(data[1])
-
-	if decodeHandler, ok := b.decodeHandlers[messageType]; ok {
-		decodeHandler(data, p)
+func (b BinaryProtocol) Decode(data []byte) model.NetworkMessage {
+	// p.ID = uint8(data[0])
+	message := model.NetworkMessage{
+		MessageType: uint8(data[1]),
 	}
+
+	if decodeHandler, ok := b.decodeHandlers[message.MessageType]; ok {
+		decodeHandler(data, &message)
+	}
+	return message
 }
 
 func encodePlayerState(p *model.Player, buf []byte) []byte {
@@ -78,34 +82,36 @@ func encodePlayerState(p *model.Player, buf []byte) []byte {
 	return buf
 }
 
-func decodePlayerInput(data []byte, p *model.Player) {
-	p.Control.Forward = false
-	p.Control.Backward = false
-	p.Control.Left = false
-	p.Control.Right = false
-	p.Control.TurretRight = false
-	p.Control.TurretLeft = false
-	p.Control.Shoot = false
+func decodePlayerInput(data []byte, message *model.NetworkMessage) {
+	controls := model.Controls{}
+	controls.Forward = false
+	controls.Backward = false
+	controls.Left = false
+	controls.Right = false
+	controls.TurretRight = false
+	controls.TurretLeft = false
+	controls.Shoot = false
 
 	if uint8(data[2]) == 1 {
-		p.Control.Forward = true
+		controls.Forward = true
 	}
 	if uint8(data[3]) == 1 {
-		p.Control.Backward = true
+		controls.Backward = true
 	}
 	if uint8(data[4]) == 1 {
-		p.Control.Left = true
+		controls.Left = true
 	}
 	if uint8(data[5]) == 1 {
-		p.Control.Right = true
+		controls.Right = true
 	}
 	if uint8(data[6]) == 1 {
-		p.Control.TurretRight = true
+		controls.TurretRight = true
 	}
 	if uint8(data[7]) == 1 {
-		p.Control.TurretLeft = true
+		controls.TurretLeft = true
 	}
 	if uint8(data[8]) == 1 {
-		p.Control.Shoot = true
+		controls.Shoot = true
 	}
+	message.Body = controls
 }

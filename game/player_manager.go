@@ -21,6 +21,7 @@ func (p *PlayerManager) NewPlayer(id uint8, x float32, y float32, conn model.Con
 		Collider: model.NewRectCollider(x, y, width, depth),
 		Client: &model.Client{
 			NetworkOut: make(chan []byte),
+			NetworkIn:  make(chan model.NetworkMessage, 100),
 			Connection: conn,
 		},
 	}
