@@ -9,14 +9,14 @@ import (
 
 // BinaryProtocol ...
 type BinaryProtocol struct {
-	encodeHandlers map[uint8]func(p *model.Player, buf []byte) []byte
+	encodeHandlers map[uint8]func(p *model.Player) []byte
 	decodeHandlers map[uint8]func(data []byte, message *model.NetworkMessage)
 }
 
 // NewBinaryProtocol ...
 func NewBinaryProtocol() BinaryProtocol {
 	protocol := BinaryProtocol{
-		encodeHandlers: make(map[uint8]func(p *model.Player, buf []byte) []byte),
+		encodeHandlers: make(map[uint8]func(p *model.Player) []byte),
 		decodeHandlers: make(map[uint8]func(data []byte, message *model.NetworkMessage)),
 	}
 
@@ -29,7 +29,7 @@ func NewBinaryProtocol() BinaryProtocol {
 
 // Encode the current player state
 func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageType uint8) []byte {
-	buf := make([]byte, 0)
+	buf := make([]byte, 0, 30)
 	buf = append(buf, byte(p.ID))
 	buf = append(buf, byte(messageType))
 
@@ -38,7 +38,7 @@ func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageT
 	buf = append(buf, currentTime...)
 
 	if encodeHandler, ok := b.encodeHandlers[messageType]; ok {
-		buf = append(buf, encodeHandler(p, buf)...)
+		buf = append(buf, encodeHandler(p)...)
 	}
 
 	return buf
@@ -46,7 +46,6 @@ func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageT
 
 // Decode player inputs
 func (b BinaryProtocol) Decode(data []byte) model.NetworkMessage {
-	// p.ID = uint8(data[0])
 	message := model.NetworkMessage{
 		MessageType: uint8(data[1]),
 	}
@@ -57,7 +56,8 @@ func (b BinaryProtocol) Decode(data []byte) model.NetworkMessage {
 	return message
 }
 
-func encodePlayerState(p *model.Player, buf []byte) []byte {
+func encodePlayerState(p *model.Player) []byte {
+	buf := make([]byte, 0, 24)
 	posX := make([]byte, 4)
 	posY := make([]byte, 4)
 	lookX := make([]byte, 4)

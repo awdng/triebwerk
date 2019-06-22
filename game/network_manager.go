@@ -131,7 +131,7 @@ func (n *NetworkManager) BroadcastGameState(state model.GameState) {
 		buf = append(buf, n.protocol.Encode(p, state.GameTime(), 1)...)
 	}
 	if len(buf) > 0 {
-		fmt.Println(buf)
+		fmt.Println(len(buf))
 		n.broadcast <- buf
 	}
 }
