@@ -88,25 +88,26 @@ func (n *NetworkManager) Start() error {
 }
 
 func (n *NetworkManager) run() {
-	log.Printf("Listening for incoming Network traffic ...")
+	log.Printf("NetworkManager: Listening for incoming Network traffic ...")
 	for {
 		select {
 		case client := <-n.register:
 			n.clients[client] = true
 			go n.writer(client)
 			go n.reader(client)
-			log.Printf("Client %s connected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
+			log.Printf("NetworkManager: Client %s connected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
 		case client := <-n.unregister:
 			if _, ok := n.clients[client]; ok {
 				client.Disconnect()
 				delete(n.clients, client)
-				log.Printf("Client %s disconnected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
+				log.Printf("NetworkManager: Client %s disconnected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
 			}
 		case message := <-n.broadcast:
 			for client := range n.clients {
 				select {
 				case client.NetworkOut <- message:
 				default:
+					log.Printf("NetworkManager: Closing connection of Client %s: Could not write to NetworkOut channel, buffer size %d", client.Connection.Identifier(), len(client.NetworkOut))
 					client.Disconnect()
 					delete(n.clients, client)
 				}
@@ -122,6 +123,13 @@ func (n *NetworkManager) Register(player *model.Player, state model.GameState) {
 	// send registration confirmation to client
 	buf := make([]byte, 0)
 	buf = append(buf, n.protocol.Encode(player, state.GameTime(), uint8(register))...)
+	n.Send(player.Client, buf)
+}
+
+// SendGameTime to player
+func (n *NetworkManager) SendGameTime(player *model.Player, state model.GameState) {
+	buf := make([]byte, 0)
+	buf = append(buf, n.protocol.Encode(player, state.GameTime(), uint8(serverTime))...)
 	n.Send(player.Client, buf)
 }
 
@@ -159,12 +167,14 @@ func (n *NetworkManager) writer(client *model.Client) {
 			client.Connection.PrepareWrite(writeWait)
 			if !ok {
 				// The NetworkManager closed the channel.
+				log.Printf("Writer: Could not read NetworkOut Channel of Client %s", client.Connection.Identifier())
 				client.Connection.Close(writeWait, true)
 				return
 			}
 
 			err := client.Connection.Write(message)
 			if err != nil {
+				log.Printf("Writer: Closing connection for Client %s: %s", client.Connection.Identifier(), err)
 				return
 			}
 		case <-ticker.C:
@@ -188,6 +198,7 @@ func (n *NetworkManager) reader(client *model.Client) {
 		message, err := client.Connection.Read()
 		if err != nil {
 			// connection will be closed
+			log.Printf("Reader: Closing connection of Client %s: %s", client.Connection.Identifier(), err)
 			break
 		}
 

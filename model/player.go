@@ -31,7 +31,7 @@ type Controls struct {
 type Player struct {
 	ID       uint8
 	Control  Controls
-	Collider RectCollider
+	Collider *RectCollider
 	Client   *Client
 }
 
@@ -111,6 +111,10 @@ func (p *Player) ApplyMovement(controls Controls) {
 	}
 	r.LastRotation = r.Rotation
 	r.TurretLastRotation = r.TurretRotation
+	// fmt.Println("Position ", r.Pivot)
+	// fmt.Println("Turret ", r.Look)
+	// fmt.Println("Rot ", r.Rotation)
+	// fmt.Println("TurretRot ", r.TurretRotation)
 	p.Control = controls
 }
 

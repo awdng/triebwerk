@@ -1,6 +1,8 @@
 package model
 
-import "math"
+import (
+	"math"
+)
 
 // Rect ...
 type Rect struct {
@@ -30,8 +32,8 @@ type RectCollider struct {
 }
 
 // NewRectCollider creates a new rectangle collider
-func NewRectCollider(x float32, y float32, width float32, depth float32) RectCollider {
-	return RectCollider{
+func NewRectCollider(x float32, y float32, width float32, depth float32) *RectCollider {
+	return &RectCollider{
 		Pivot: &Point{
 			X: x,
 			Y: y,
