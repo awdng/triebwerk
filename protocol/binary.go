@@ -22,6 +22,8 @@ func NewBinaryProtocol() BinaryProtocol {
 
 	// register Handlers by messageType
 	protocol.encodeHandlers[1] = encodePlayerState
+	protocol.encodeHandlers[2] = encodePlayerRegister
+
 	protocol.decodeHandlers[1] = decodePlayerInput
 
 	return protocol
@@ -29,7 +31,7 @@ func NewBinaryProtocol() BinaryProtocol {
 
 // Encode the current player state
 func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageType uint8) []byte {
-	buf := make([]byte, 0, 30)
+	buf := make([]byte, 0)
 	buf = append(buf, byte(p.ID))
 	buf = append(buf, byte(messageType))
 
@@ -80,6 +82,11 @@ func encodePlayerState(p *model.Player) []byte {
 	buf = append(buf, turretRotation...)
 
 	return buf
+}
+
+func encodePlayerRegister(p *model.Player) []byte {
+	// for now do nothing
+	return []byte{}
 }
 
 func decodePlayerInput(data []byte, message *model.NetworkMessage) {

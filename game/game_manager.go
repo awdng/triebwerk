@@ -1,6 +1,7 @@
 package game
 
 import (
+	"log"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
@@ -32,7 +33,7 @@ func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game
 func (g *Game) RegisterPlayer(conn model.Connection) {
 	g.state.PlayerCount++
 	player := g.playerManager.NewPlayer(g.state.PlayerCount, 10*float32(g.state.PlayerCount), 10, conn)
-	g.networkManager.Register(player.Client)
+	g.networkManager.Register(player, g.state)
 	g.state.Players[g.state.PlayerCount] = player
 }
 
@@ -51,7 +52,12 @@ func (g *Game) Start() error {
 			// read client inputs
 			for _, p := range g.state.Players {
 				message := <-p.Client.NetworkIn
-				p.ApplyMovement(message.Body.(model.Controls))
+				switch body := message.Body.(type) {
+				case model.Controls:
+					p.ApplyMovement(body)
+				default:
+					log.Printf("Unrecognized incoming network message: %s", message)
+				}
 			}
 
 			// broadcast game state to clients

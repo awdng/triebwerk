@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -129,4 +130,8 @@ func (c *Client) Disconnect() {
 type NetworkMessage struct {
 	MessageType uint8
 	Body        interface{}
+}
+
+func (m NetworkMessage) String() string {
+	return fmt.Sprintf("NetworkMessage %d - %+v", m.MessageType, m.Body)
 }

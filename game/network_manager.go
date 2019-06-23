@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -20,6 +19,18 @@ const (
 
 	// Maximum message size allowed from peer.
 	maxMessageSize = 512
+)
+
+// MessageType ...
+type MessageType uint8
+
+const (
+	spawn MessageType = iota
+	position
+	register
+	bullet
+	hit
+	serverTime
 )
 
 // Protocol that encodes/decodes data for network transfer
@@ -104,22 +115,18 @@ func (n *NetworkManager) run() {
 	}
 }
 
-// Register a new CLient with the NetworkService
-func (n *NetworkManager) Register(client *model.Client) {
-	n.register <- client
+// Register a new Client with the NetworkService
+func (n *NetworkManager) Register(player *model.Player, state model.GameState) {
+	n.register <- player.Client
+
+	// send registration confirmation to client
+	buf := make([]byte, 0)
+	buf = append(buf, n.protocol.Encode(player, state.GameTime(), uint8(register))...)
+	n.Send(player.Client, buf)
 }
 
 // Send data to a client
 func (n *NetworkManager) Send(client *model.Client, message []byte) error {
-	if _, ok := n.clients[client]; !ok {
-		return fmt.Errorf("Client not found %d", client.Connection)
-	}
-
-	// TODO: implement encoding of player state
-	// Message needs to receive a struct that is encoded before sending to networkOut
-	// struct needs to include MessageType
-	//n.Protocol.Encode(player, ...)
-
 	client.NetworkOut <- message
 	return nil
 }
@@ -128,10 +135,9 @@ func (n *NetworkManager) Send(client *model.Client, message []byte) error {
 func (n *NetworkManager) BroadcastGameState(state model.GameState) {
 	buf := make([]byte, 0)
 	for _, p := range state.Players {
-		buf = append(buf, n.protocol.Encode(p, state.GameTime(), 1)...)
+		buf = append(buf, n.protocol.Encode(p, state.GameTime(), uint8(position))...)
 	}
 	if len(buf) > 0 {
-		fmt.Println(len(buf))
 		n.broadcast <- buf
 	}
 }
