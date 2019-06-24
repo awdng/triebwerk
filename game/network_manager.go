@@ -117,7 +117,7 @@ func (n *NetworkManager) run() {
 }
 
 // Register a new Client with the NetworkService
-func (n *NetworkManager) Register(player *model.Player, state model.GameState) {
+func (n *NetworkManager) Register(player *model.Player, state *model.GameState) {
 	n.register <- player.Client
 
 	// send registration confirmation to client
@@ -127,7 +127,7 @@ func (n *NetworkManager) Register(player *model.Player, state model.GameState) {
 }
 
 // SendGameTime to player
-func (n *NetworkManager) SendGameTime(player *model.Player, state model.GameState) {
+func (n *NetworkManager) SendGameTime(player *model.Player, state *model.GameState) {
 	buf := make([]byte, 0)
 	buf = append(buf, n.protocol.Encode(player, state.GameTime(), uint8(serverTime))...)
 	n.Send(player.Client, buf)
@@ -140,7 +140,7 @@ func (n *NetworkManager) Send(client *model.Client, message []byte) error {
 }
 
 // BroadcastGameState ...
-func (n *NetworkManager) BroadcastGameState(state model.GameState) {
+func (n *NetworkManager) BroadcastGameState(state *model.GameState) {
 	buf := make([]byte, 0)
 	for _, p := range state.Players {
 		buf = append(buf, n.protocol.Encode(p, state.GameTime(), uint8(position))...)

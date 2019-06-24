@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/binary"
+	"fmt"
 	"math"
 
 	"github.com/awdng/triebwerk/model"
@@ -25,6 +26,7 @@ func NewBinaryProtocol() BinaryProtocol {
 	protocol.encodeHandlers[2] = encodePlayerRegister
 
 	protocol.decodeHandlers[1] = decodePlayerInput
+	protocol.decodeHandlers[5] = decodePlayerTime
 
 	return protocol
 }
@@ -121,4 +123,8 @@ func decodePlayerInput(data []byte, message *model.NetworkMessage) {
 		controls.Shoot = true
 	}
 	message.Body = controls
+}
+
+func decodePlayerTime(data []byte, message *model.NetworkMessage) {
+	fmt.Println(data)
 }

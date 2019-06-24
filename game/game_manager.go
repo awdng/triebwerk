@@ -7,14 +7,14 @@ import (
 	"github.com/awdng/triebwerk/model"
 )
 
-const tickrate = 60
+const tickrate = 30
 
 // Game represents the game state
 type Game struct {
 	tickStart      time.Time
 	networkManager *NetworkManager
 	playerManager  *PlayerManager
-	state          model.GameState
+	state          *model.GameState
 }
 
 // NewGame creates a game instance
@@ -22,7 +22,7 @@ func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game
 	return &Game{
 		networkManager: networkManager,
 		playerManager:  playerManager,
-		state: model.GameState{
+		state: &model.GameState{
 			StartTime: time.Now(),
 			Players:   make(map[uint8]*model.Player),
 		},
@@ -56,7 +56,7 @@ func (g *Game) Start() error {
 				case 1:
 					p.ApplyMovement(message.Body.(model.Controls))
 				case 5:
-					g.networkManager.SendGameTime(p, g.state)
+					// g.networkManager.SendGameTime(p, g.state)
 				default:
 					log.Printf("Unrecognized incoming network message: %s", message)
 				}
