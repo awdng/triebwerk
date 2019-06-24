@@ -1,7 +1,6 @@
 package game
 
 import (
-	"log"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
@@ -37,8 +36,27 @@ func (g *Game) RegisterPlayer(conn model.Connection) {
 	g.state.Players[g.state.PlayerCount] = player
 }
 
-// Start the server update loop
+// Start the gameserver loop
 func (g *Game) Start() error {
+	// goroutine constantly reads player input
+	go func() {
+		for {
+			for _, p := range g.state.Players {
+				select {
+				case message := <-p.Client.NetworkIn:
+					switch messageType := message.MessageType; messageType {
+					case 1:
+						p.Control = message.Body.(model.Controls)
+					case 5:
+						g.networkManager.SendTime(p, g.state, &message)
+					default:
+					}
+				default:
+				}
+			}
+		}
+	}()
+
 	// Execute game loop
 	go func() {
 		ticker := time.NewTicker(1000 / tickrate * time.Millisecond)
@@ -49,17 +67,9 @@ func (g *Game) Start() error {
 				continue
 			}
 
-			// read client inputs
+			// apply latest client inputs
 			for _, p := range g.state.Players {
-				message := <-p.Client.NetworkIn
-				switch messageType := message.MessageType; messageType {
-				case 1:
-					p.ApplyMovement(message.Body.(model.Controls))
-				case 5:
-					// g.networkManager.SendGameTime(p, g.state)
-				default:
-					log.Printf("Unrecognized incoming network message: %s", message)
-				}
+				p.ApplyMovement(p.Control)
 			}
 
 			// broadcast game state to clients

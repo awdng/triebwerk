@@ -35,7 +35,7 @@ const (
 
 // Protocol that encodes/decodes data for network transfer
 type Protocol interface {
-	Encode(p *model.Player, currentGameTime uint32, messageType uint8) []byte
+	Encode(id uint8, currentGameTime uint32, message *model.NetworkMessage) []byte
 	Decode(data []byte) model.NetworkMessage
 }
 
@@ -122,14 +122,16 @@ func (n *NetworkManager) Register(player *model.Player, state *model.GameState) 
 
 	// send registration confirmation to client
 	buf := make([]byte, 0)
-	buf = append(buf, n.protocol.Encode(player, state.GameTime(), uint8(register))...)
+	buf = append(buf, n.protocol.Encode(player.ID, state.GameTime(), &model.NetworkMessage{
+		MessageType: uint8(register),
+	})...)
 	n.Send(player.Client, buf)
 }
 
-// SendGameTime to player
-func (n *NetworkManager) SendGameTime(player *model.Player, state *model.GameState) {
+// SendTime back to player
+func (n *NetworkManager) SendTime(player *model.Player, state *model.GameState, message *model.NetworkMessage) {
 	buf := make([]byte, 0)
-	buf = append(buf, n.protocol.Encode(player, state.GameTime(), uint8(serverTime))...)
+	buf = append(buf, n.protocol.Encode(player.ID, state.GameTime(), message)...)
 	n.Send(player.Client, buf)
 }
 
@@ -143,7 +145,10 @@ func (n *NetworkManager) Send(client *model.Client, message []byte) error {
 func (n *NetworkManager) BroadcastGameState(state *model.GameState) {
 	buf := make([]byte, 0)
 	for _, p := range state.Players {
-		buf = append(buf, n.protocol.Encode(p, state.GameTime(), uint8(position))...)
+		buf = append(buf, n.protocol.Encode(p.ID, state.GameTime(), &model.NetworkMessage{
+			MessageType: uint8(position),
+			Body:        p,
+		})...)
 	}
 	if len(buf) > 0 {
 		n.broadcast <- buf

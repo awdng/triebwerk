@@ -2,7 +2,6 @@ package protocol
 
 import (
 	"encoding/binary"
-	"fmt"
 	"math"
 
 	"github.com/awdng/triebwerk/model"
@@ -10,20 +9,21 @@ import (
 
 // BinaryProtocol ...
 type BinaryProtocol struct {
-	encodeHandlers map[uint8]func(p *model.Player) []byte
+	encodeHandlers map[uint8]func(message *model.NetworkMessage) []byte
 	decodeHandlers map[uint8]func(data []byte, message *model.NetworkMessage)
 }
 
 // NewBinaryProtocol ...
 func NewBinaryProtocol() BinaryProtocol {
 	protocol := BinaryProtocol{
-		encodeHandlers: make(map[uint8]func(p *model.Player) []byte),
+		encodeHandlers: make(map[uint8]func(message *model.NetworkMessage) []byte),
 		decodeHandlers: make(map[uint8]func(data []byte, message *model.NetworkMessage)),
 	}
 
 	// register Handlers by messageType
 	protocol.encodeHandlers[1] = encodePlayerState
 	protocol.encodeHandlers[2] = encodePlayerRegister
+	protocol.encodeHandlers[5] = encodePlayerTime
 
 	protocol.decodeHandlers[1] = decodePlayerInput
 	protocol.decodeHandlers[5] = decodePlayerTime
@@ -31,18 +31,18 @@ func NewBinaryProtocol() BinaryProtocol {
 	return protocol
 }
 
-// Encode the current player state
-func (b BinaryProtocol) Encode(p *model.Player, currentGameTime uint32, messageType uint8) []byte {
+// Encode data to send to clients
+func (b BinaryProtocol) Encode(id uint8, currentGameTime uint32, message *model.NetworkMessage) []byte {
 	buf := make([]byte, 0)
-	buf = append(buf, byte(p.ID))
-	buf = append(buf, byte(messageType))
+	buf = append(buf, byte(id))
+	buf = append(buf, byte(message.MessageType))
 
 	currentTime := make([]byte, 4)
 	binary.LittleEndian.PutUint32(currentTime[:], currentGameTime)
 	buf = append(buf, currentTime...)
 
-	if encodeHandler, ok := b.encodeHandlers[messageType]; ok {
-		buf = append(buf, encodeHandler(p)...)
+	if encodeHandler, ok := b.encodeHandlers[message.MessageType]; ok {
+		buf = append(buf, encodeHandler(message)...)
 	}
 
 	return buf
@@ -60,7 +60,8 @@ func (b BinaryProtocol) Decode(data []byte) model.NetworkMessage {
 	return message
 }
 
-func encodePlayerState(p *model.Player) []byte {
+func encodePlayerState(message *model.NetworkMessage) []byte {
+	p := message.Body.(*model.Player)
 	buf := make([]byte, 0, 24)
 	posX := make([]byte, 4)
 	posY := make([]byte, 4)
@@ -86,9 +87,16 @@ func encodePlayerState(p *model.Player) []byte {
 	return buf
 }
 
-func encodePlayerRegister(p *model.Player) []byte {
+func encodePlayerRegister(message *model.NetworkMessage) []byte {
 	// for now do nothing
 	return []byte{}
+}
+
+func encodePlayerTime(message *model.NetworkMessage) []byte {
+	time := make([]byte, 4)
+	binary.LittleEndian.PutUint32(time[:], message.Body.(uint32))
+
+	return time
 }
 
 func decodePlayerInput(data []byte, message *model.NetworkMessage) {
@@ -126,5 +134,5 @@ func decodePlayerInput(data []byte, message *model.NetworkMessage) {
 }
 
 func decodePlayerTime(data []byte, message *model.NetworkMessage) {
-	fmt.Println(data)
+	message.Body = binary.BigEndian.Uint32(data[2:])
 }
