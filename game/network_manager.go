@@ -9,10 +9,10 @@ import (
 
 const (
 	// Time allowed to write a message to the peer.
-	writeWait = 10 * time.Second
+	writeWait = 2 * time.Second
 
 	// Time allowed to read the next pong message from the peer.
-	pongWait = 60 * time.Second
+	pongWait = 5 * time.Second
 
 	// Send pings to peer with this period. Must be less than pongWait.
 	pingPeriod = (pongWait * 9) / 10
@@ -44,6 +44,8 @@ type Transport interface {
 	Init()
 	Run() error
 	RegisterNewConnHandler(register func(conn model.Connection))
+	UnregisterConnHandler(unregister func(conn model.Connection))
+	Unregister(conn model.Connection)
 }
 
 // NetworkManager maintains the set of active clients and broadcasts messages to the
@@ -101,6 +103,7 @@ func (n *NetworkManager) run() {
 				client.Disconnect()
 				delete(n.clients, client)
 				log.Printf("NetworkManager: Client %s disconnected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
+				n.transport.Unregister(client.Connection)
 			}
 		case message := <-n.broadcast:
 			for client := range n.clients {
@@ -195,8 +198,8 @@ func (n *NetworkManager) writer(client *model.Client) {
 // reads from this goroutine.
 func (n *NetworkManager) reader(client *model.Client) {
 	defer func() {
-		n.unregister <- client
 		client.Connection.Close(writeWait, false)
+		n.unregister <- client
 	}()
 	client.Connection.PrepareRead(maxMessageSize, pongWait)
 	for {

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"log"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
@@ -34,6 +35,18 @@ func (g *Game) RegisterPlayer(conn model.Connection) {
 	player := g.playerManager.NewPlayer(g.state.PlayerCount, 10*float32(g.state.PlayerCount), 0, conn)
 	g.networkManager.Register(player, g.state)
 	g.state.Players[g.state.PlayerCount] = player
+	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.PlayerCount)
+}
+
+// UnregisterPlayer of a networked game
+func (g *Game) UnregisterPlayer(conn model.Connection) {
+	for _, p := range g.state.Players {
+		if p.Client.Connection == conn {
+			g.state.PlayerCount--
+			delete(g.state.Players, p.ID)
+			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.PlayerCount)
+		}
+	}
 }
 
 // Start the gameserver loop
@@ -59,7 +72,7 @@ func (g *Game) Start() error {
 
 	// Execute game loop
 	go func() {
-		ticker := time.NewTicker(1000 / tickrate * time.Millisecond)
+		ticker := time.NewTicker(33 * time.Millisecond)
 		for range ticker.C {
 			g.tickStart = time.Now()
 

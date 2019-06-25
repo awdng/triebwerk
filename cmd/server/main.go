@@ -16,6 +16,7 @@ func main() {
 	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
 	gameManager := game.NewGame(networkManager, playerManager)
 	transport.RegisterNewConnHandler(gameManager.RegisterPlayer)
+	transport.UnregisterConnHandler(gameManager.UnregisterPlayer)
 
 	// start game server
 	log.Fatal(gameManager.Start())

@@ -12,8 +12,9 @@ import (
 
 // Transport represents the websocket context
 type Transport struct {
-	upgrader websocket.Upgrader
-	register func(conn model.Connection)
+	upgrader   websocket.Upgrader
+	register   func(conn model.Connection)
+	unregister func(conn model.Connection)
 }
 
 // NewTransport creates the websocket context
@@ -32,6 +33,16 @@ func NewTransport() *Transport {
 // RegisterNewConnHandler is a callback for new connections
 func (t *Transport) RegisterNewConnHandler(register func(conn model.Connection)) {
 	t.register = register
+}
+
+// UnregisterConnHandler is a callback for closed connections
+func (t *Transport) UnregisterConnHandler(unregister func(conn model.Connection)) {
+	t.unregister = unregister
+}
+
+// Unregister callback
+func (t *Transport) Unregister(conn model.Connection) {
+	t.unregister(conn)
 }
 
 // Init ...
