@@ -147,7 +147,8 @@ func (n *NetworkManager) Send(client *model.Client, message []byte) error {
 // BroadcastGameState ...
 func (n *NetworkManager) BroadcastGameState(state *model.GameState) {
 	buf := make([]byte, 0)
-	for _, p := range state.Players {
+	players := state.GetPlayers()
+	for _, p := range players {
 		buf = append(buf, n.protocol.Encode(p.ID, state.GameTime(), &model.NetworkMessage{
 			MessageType: uint8(position),
 			Body:        p,
