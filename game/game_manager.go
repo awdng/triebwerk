@@ -68,6 +68,7 @@ func (g *Game) Start() error {
 }
 
 func (g *Game) processInputs() {
+	// continously reading all player inputs
 	for {
 		players := g.state.GetPlayers()
 		for _, p := range players {
@@ -100,7 +101,7 @@ func (g *Game) gameLoop() {
 
 		// apply latest client inputs
 		for _, p := range players {
-			p.ApplyMovement(p.Control)
+			p.ApplyMovement(p.Control, players)
 		}
 
 		// broadcast game state to clients

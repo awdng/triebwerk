@@ -1,6 +1,7 @@
 package model
 
 import (
+	"fmt"
 	"math"
 )
 
@@ -10,6 +11,10 @@ type Rect struct {
 	B *Point
 	C *Point
 	D *Point
+}
+
+type Polygon struct {
+	Points []*Point
 }
 
 // RectCollider ...
@@ -111,4 +116,82 @@ func (r *RectCollider) rotateRectPoint(angle float32, p *Point) {
 	// translate point back:
 	p.X = xnew + r.Pivot.X
 	p.Y = ynew + r.Pivot.Y
+}
+
+func (r *RectCollider) collisionFront(other RectCollider) {
+	frontPolygon := Polygon{
+		Points: []*Point{r.Rect.A, r.Rect.B, r.Pivot},
+	}
+	otherPolygon := Polygon{
+		Points: []*Point{other.Rect.A, other.Rect.B, other.Rect.C, other.Rect.D},
+	}
+	if r.doPolygonsIntersect(frontPolygon, otherPolygon) {
+		r.CollisionFront = true
+		fmt.Println("collision front!")
+		return
+	}
+
+	r.CollisionFront = false
+}
+
+func (r *RectCollider) collisionBack(other RectCollider) {
+	backPolygon := Polygon{
+		Points: []*Point{r.Rect.C, r.Rect.D, r.Pivot},
+	}
+	otherPolygon := Polygon{
+		Points: []*Point{other.Rect.A, other.Rect.B, other.Rect.C, other.Rect.D},
+	}
+	if r.doPolygonsIntersect(backPolygon, otherPolygon) {
+		r.CollisionBack = true
+		fmt.Println("collision back!")
+		return
+	}
+
+	r.CollisionBack = false
+}
+
+func (r *RectCollider) doPolygonsIntersect(a Polygon, b Polygon) bool {
+	return doPolygonsIntersect(a, b)
+}
+
+func doPolygonsIntersect(a Polygon, b Polygon) bool {
+	for _, polygon := range [2]Polygon{a, b} {
+		for i1 := 0; i1 < len(polygon.Points); i1++ {
+			i2 := (i1 + 1) % len(polygon.Points)
+			p1 := polygon.Points[i1]
+			p2 := polygon.Points[i2]
+
+			normal := Point{
+				X: p2.Y - p1.Y,
+				Y: p1.X - p2.X,
+			}
+
+			var minA, maxA *float32
+			for _, p := range a.Points {
+				projected := normal.X*p.X + normal.Y*p.Y
+				if minA == nil || projected < *minA {
+					minA = &projected
+				}
+				if maxA == nil || projected > *maxA {
+					maxA = &projected
+				}
+			}
+
+			var minB, maxB *float32
+			for _, p := range b.Points {
+				projected := normal.X*p.X + normal.Y*p.Y
+				if minB == nil || projected < *minB {
+					minB = &projected
+				}
+				if maxB == nil || projected > *maxB {
+					maxB = &projected
+				}
+			}
+
+			if *maxA < *minB || *maxB < *minA {
+				return false
+			}
+		}
+	}
+	return true
 }

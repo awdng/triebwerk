@@ -99,6 +99,10 @@ func encodePlayerTime(message *model.NetworkMessage) []byte {
 	return time
 }
 
+func EncodePlayerInput() {
+
+}
+
 func decodePlayerInput(data []byte, message *model.NetworkMessage) {
 	controls := model.Controls{}
 	controls.Forward = false
