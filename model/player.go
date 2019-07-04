@@ -36,7 +36,7 @@ type Player struct {
 }
 
 // ApplyMovement applies the movement input
-func (p *Player) ApplyMovement(controls Controls, players []*Player) {
+func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map) {
 	r := p.Collider
 
 	//check collision of this player against other players
@@ -44,13 +44,16 @@ func (p *Player) ApplyMovement(controls Controls, players []*Player) {
 		if p.ID == enemy.ID {
 			continue
 		}
-		r.collisionFront(*enemy.Collider)
+		r.collisionFrontRect(*enemy.Collider)
 		r.collisionBack(*enemy.Collider)
 
 		if r.CollisionFront || r.CollisionBack {
 			break
 		}
 	}
+
+	//check collision of this player against environment
+	r.collisionFront(m.Collider)
 
 	dt := float32(0.033)
 	r.Velocity -= float32(15*1.5) * dt

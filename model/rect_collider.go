@@ -118,13 +118,18 @@ func (r *RectCollider) rotateRectPoint(angle float32, p *Point) {
 	p.Y = ynew + r.Pivot.Y
 }
 
-func (r *RectCollider) collisionFront(other RectCollider) {
-	frontPolygon := Polygon{
-		Points: []*Point{r.Rect.A, r.Rect.B, r.Pivot},
-	}
+func (r *RectCollider) collisionFrontRect(other RectCollider) {
 	otherPolygon := Polygon{
 		Points: []*Point{other.Rect.A, other.Rect.B, other.Rect.C, other.Rect.D},
 	}
+	r.collisionFront(otherPolygon)
+}
+
+func (r *RectCollider) collisionFront(otherPolygon Polygon) {
+	frontPolygon := Polygon{
+		Points: []*Point{r.Rect.A, r.Rect.B, r.Pivot},
+	}
+
 	if r.doPolygonsIntersect(frontPolygon, otherPolygon) {
 		r.CollisionFront = true
 		fmt.Println("collision front!")

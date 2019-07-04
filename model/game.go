@@ -10,6 +10,7 @@ type GameState struct {
 	StartTime   time.Time
 	PlayerCount uint8
 	Players     map[uint8]*Player
+	Map         *Map
 	mutex       *sync.Mutex
 }
 
@@ -18,6 +19,7 @@ func NewGameState() *GameState {
 	return &GameState{
 		StartTime: time.Now(),
 		Players:   make(map[uint8]*Player),
+		Map:       NewMap(),
 		mutex:     &sync.Mutex{},
 	}
 }

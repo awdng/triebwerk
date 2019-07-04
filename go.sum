@@ -1,2 +1,4 @@
+github.com/golang/geo v0.0.0-20190507233405-a0e886e97a51 h1:MQn73MfXCNoQbk2UxlMcU7HMSiOipZ9KL97Lx+/5e/k=
+github.com/golang/geo v0.0.0-20190507233405-a0e886e97a51/go.mod h1:QZ0nwyI2jOfgRAoBvP+ab5aRr7c9x7lhGEJrKvBwjWI=
 github.com/gorilla/websocket v1.4.0 h1:WDFjx/TMzVgy9VdMMQi2K2Emtwi2QcUQsztZ/zLaH/Q=
 github.com/gorilla/websocket v1.4.0/go.mod h1:E7qHFY5m1UJ88s3WnNqhKjPHQ0heANvMoAMk2YaljkQ=

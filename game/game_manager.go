@@ -101,7 +101,7 @@ func (g *Game) gameLoop() {
 
 		// apply latest client inputs
 		for _, p := range players {
-			p.ApplyMovement(p.Control, players)
+			p.ApplyMovement(p.Control, players, g.state.Map)
 		}
 
 		// broadcast game state to clients
