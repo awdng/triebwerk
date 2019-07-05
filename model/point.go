@@ -4,8 +4,8 @@ import "math"
 
 // Point ...
 type Point struct {
-	X float32
-	Y float32
+	X float32 `json:"x"`
+	Y float32 `json:"y"`
 }
 
 func normalize(v *Point) {

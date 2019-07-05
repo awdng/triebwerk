@@ -36,26 +36,32 @@ type Player struct {
 }
 
 // ApplyMovement applies the movement input
-func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map) {
+func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map, dt float32) {
 	r := p.Collider
 
 	//check collision of this player against other players
+	r.CollisionFront = false
+	r.CollisionBack = false
 	for _, enemy := range players {
 		if p.ID == enemy.ID {
 			continue
 		}
 		r.collisionFrontRect(*enemy.Collider)
-		r.collisionBack(*enemy.Collider)
+		r.collisionBackRect(*enemy.Collider)
 
 		if r.CollisionFront || r.CollisionBack {
 			break
 		}
 	}
 
-	//check collision of this player against environment
-	r.collisionFront(m.Collider)
+	//check collision of this player against the environment
+	if !r.CollisionFront {
+		r.collisionFront(m.Collider)
+	}
+	if !r.CollisionBack {
+		r.collisionBack(m.Collider)
+	}
 
-	dt := float32(0.033)
 	r.Velocity -= float32(15*1.5) * dt
 	if r.Velocity < 0 {
 		r.Velocity = 0
@@ -127,11 +133,10 @@ func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map) {
 	}
 	r.LastRotation = r.Rotation
 	r.TurretLastRotation = r.TurretRotation
-	// fmt.Println("Position ", r.Pivot)
-	// fmt.Println("Turret ", r.Look)
-	// fmt.Println("Rot ", r.Rotation)
-	// fmt.Println("TurretRot ", r.TurretRotation)
+
 	p.Control = controls
+
+	// fmt.Printf("%f %f \n", p.Collider.Pivot.X, p.Collider.Pivot.Y)
 }
 
 // Client represents a network client

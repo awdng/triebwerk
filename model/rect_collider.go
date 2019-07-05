@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"math"
 )
 
@@ -118,11 +117,42 @@ func (r *RectCollider) rotateRectPoint(angle float32, p *Point) {
 	p.Y = ynew + r.Pivot.Y
 }
 
+// ChangePosition of Collider
+func (r *RectCollider) ChangePosition(posX, posY float32) {
+	dX := posX - r.Pivot.X
+	dY := posY - r.Pivot.Y
+
+	r.Pivot.X = posX
+	r.Pivot.Y = posY
+
+	r.Look.X += dX
+	r.Look.Y += dY
+
+	r.Rect.A.X += dX
+	r.Rect.A.Y += dY
+
+	r.Rect.B.X += dX
+	r.Rect.B.Y += dY
+
+	r.Rect.C.X += dX
+	r.Rect.C.Y += dY
+
+	r.Rect.D.X += dX
+	r.Rect.D.Y += dY
+}
+
 func (r *RectCollider) collisionFrontRect(other RectCollider) {
 	otherPolygon := Polygon{
 		Points: []*Point{other.Rect.A, other.Rect.B, other.Rect.C, other.Rect.D},
 	}
 	r.collisionFront(otherPolygon)
+}
+
+func (r *RectCollider) collisionBackRect(other RectCollider) {
+	otherPolygon := Polygon{
+		Points: []*Point{other.Rect.A, other.Rect.B, other.Rect.C, other.Rect.D},
+	}
+	r.collisionBack(otherPolygon)
 }
 
 func (r *RectCollider) collisionFront(otherPolygon Polygon) {
@@ -132,23 +162,19 @@ func (r *RectCollider) collisionFront(otherPolygon Polygon) {
 
 	if r.doPolygonsIntersect(frontPolygon, otherPolygon) {
 		r.CollisionFront = true
-		fmt.Println("collision front!")
 		return
 	}
 
 	r.CollisionFront = false
 }
 
-func (r *RectCollider) collisionBack(other RectCollider) {
+func (r *RectCollider) collisionBack(otherPolygon Polygon) {
 	backPolygon := Polygon{
 		Points: []*Point{r.Rect.C, r.Rect.D, r.Pivot},
 	}
-	otherPolygon := Polygon{
-		Points: []*Point{other.Rect.A, other.Rect.B, other.Rect.C, other.Rect.D},
-	}
+
 	if r.doPolygonsIntersect(backPolygon, otherPolygon) {
 		r.CollisionBack = true
-		fmt.Println("collision back!")
 		return
 	}
 
