@@ -68,6 +68,48 @@ func applyInput(this js.Value, args []js.Value) interface{} {
 	return dst
 }
 
+func getPlayerState(this js.Value, args []js.Value) interface{} {
+	if localPlayer == nil {
+		return js.ValueOf(nil)
+	}
+
+	id := uint8(args[0].Int())
+	var player *model.Player
+	for _, p := range players {
+		if p.ID != id {
+			continue
+		}
+		player = p
+	}
+
+	var uint8Array = js.Global().Get("Uint8Array")
+	buf := make([]byte, 0, 24)
+	posX := make([]byte, 4)
+	posY := make([]byte, 4)
+	lookX := make([]byte, 4)
+	lookY := make([]byte, 4)
+	rotation := make([]byte, 4)
+	turretRotation := make([]byte, 4)
+
+	binary.LittleEndian.PutUint32(posX[:], math.Float32bits(player.Collider.Pivot.X))
+	binary.LittleEndian.PutUint32(posY[:], math.Float32bits(player.Collider.Pivot.Y))
+	binary.LittleEndian.PutUint32(lookX[:], math.Float32bits(player.Collider.Look.X))
+	binary.LittleEndian.PutUint32(lookY[:], math.Float32bits(player.Collider.Look.Y))
+	binary.LittleEndian.PutUint32(rotation[:], math.Float32bits(player.Collider.Rotation))
+	binary.LittleEndian.PutUint32(turretRotation[:], math.Float32bits(player.Collider.TurretRotation))
+
+	buf = append(buf, posX...)
+	buf = append(buf, posY...)
+	buf = append(buf, lookX...)
+	buf = append(buf, lookY...)
+	buf = append(buf, rotation...)
+	buf = append(buf, turretRotation...)
+
+	dst := uint8Array.New(len(buf))
+	js.CopyBytesToJS(dst, buf)
+	return dst
+}
+
 func applyShadowInput(this js.Value, args []js.Value) interface{} {
 	if shadowPlayer == nil {
 		return js.ValueOf(nil)
@@ -240,6 +282,7 @@ func registerCallbacks() {
 	js.Global().Set("getLocalPlayerPosition", js.FuncOf(getLocalPlayerPosition))
 	js.Global().Set("createNetworkPlayer", js.FuncOf(createNetworkPlayer))
 	js.Global().Set("updateNetworkPlayer", js.FuncOf(updateNetworkPlayer))
+	js.Global().Set("getPlayerState", js.FuncOf(getPlayerState))
 	js.Global().Set("createShadowPlayer", js.FuncOf(createShadowPlayer))
 	js.Global().Set("updateShadowPlayer", js.FuncOf(updateShadowPlayer))
 	// js.Global().Set("encodePlayerInput", js.FuncOf(encodePlayerInput))

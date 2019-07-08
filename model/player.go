@@ -25,6 +25,7 @@ type Controls struct {
 	TurretLeft  bool
 	TurretRight bool
 	Shoot       bool
+	Sequence    uint32
 }
 
 // Player ...

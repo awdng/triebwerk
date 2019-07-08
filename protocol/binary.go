@@ -62,13 +62,14 @@ func (b BinaryProtocol) Decode(data []byte) model.NetworkMessage {
 
 func encodePlayerState(message *model.NetworkMessage) []byte {
 	p := message.Body.(*model.Player)
-	buf := make([]byte, 0, 24)
+	buf := make([]byte, 0, 28)
 	posX := make([]byte, 4)
 	posY := make([]byte, 4)
 	lookX := make([]byte, 4)
 	lookY := make([]byte, 4)
 	rotation := make([]byte, 4)
 	turretRotation := make([]byte, 4)
+	sequence := make([]byte, 4)
 
 	binary.LittleEndian.PutUint32(posX[:], math.Float32bits(p.Collider.Pivot.X))
 	binary.LittleEndian.PutUint32(posY[:], math.Float32bits(p.Collider.Pivot.Y))
@@ -76,6 +77,7 @@ func encodePlayerState(message *model.NetworkMessage) []byte {
 	binary.LittleEndian.PutUint32(lookY[:], math.Float32bits(p.Collider.Look.Y))
 	binary.LittleEndian.PutUint32(rotation[:], math.Float32bits(p.Collider.Rotation))
 	binary.LittleEndian.PutUint32(turretRotation[:], math.Float32bits(p.Collider.TurretRotation))
+	binary.LittleEndian.PutUint32(sequence[:], p.Control.Sequence)
 
 	buf = append(buf, posX...)
 	buf = append(buf, posY...)
@@ -83,6 +85,7 @@ func encodePlayerState(message *model.NetworkMessage) []byte {
 	buf = append(buf, lookY...)
 	buf = append(buf, rotation...)
 	buf = append(buf, turretRotation...)
+	buf = append(buf, sequence...)
 
 	return buf
 }
@@ -134,6 +137,7 @@ func decodePlayerInput(data []byte, message *model.NetworkMessage) {
 	if uint8(data[8]) == 1 {
 		controls.Shoot = true
 	}
+	controls.Sequence = binary.BigEndian.Uint32(data[9:])
 	message.Body = controls
 }
 
