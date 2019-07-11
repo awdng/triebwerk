@@ -44,11 +44,11 @@ func NewRectCollider(x float32, y float32, width float32, depth float32) *RectCo
 		},
 		Look: &Point{
 			X: x,
-			Y: 2,
+			Y: y + 2,
 		},
 		Turret: &Point{
 			X: x,
-			Y: 3,
+			Y: y + 3,
 		},
 		Dir: &Point{
 			X: 0,
