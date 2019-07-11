@@ -32,9 +32,9 @@ func NewBinaryProtocol() BinaryProtocol {
 }
 
 // Encode data to send to clients
-func (b BinaryProtocol) Encode(id uint8, currentGameTime uint32, message *model.NetworkMessage) []byte {
+func (b BinaryProtocol) Encode(id int, currentGameTime uint32, message *model.NetworkMessage) []byte {
 	buf := make([]byte, 0)
-	buf = append(buf, byte(id))
+	buf = append(buf, byte(uint8(id)))
 	buf = append(buf, byte(message.MessageType))
 
 	currentTime := make([]byte, 4)

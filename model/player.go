@@ -30,7 +30,7 @@ type Controls struct {
 
 // Player ...
 type Player struct {
-	ID       uint8
+	ID       int
 	Control  Controls
 	Collider *RectCollider
 	Client   *Client

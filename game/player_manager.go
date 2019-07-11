@@ -15,7 +15,7 @@ func NewPlayerManager() *PlayerManager {
 }
 
 // NewPlayer creates a new player object
-func (p *PlayerManager) NewPlayer(id uint8, x float32, y float32, conn model.Connection) *model.Player {
+func (p *PlayerManager) NewPlayer(id int, x float32, y float32, conn model.Connection) *model.Player {
 	return &model.Player{
 		ID:       id,
 		Collider: model.NewRectCollider(x, y, width, depth),

@@ -35,7 +35,7 @@ const (
 
 // Protocol that encodes/decodes data for network transfer
 type Protocol interface {
-	Encode(id uint8, currentGameTime uint32, message *model.NetworkMessage) []byte
+	Encode(id int, currentGameTime uint32, message *model.NetworkMessage) []byte
 	Decode(data []byte) model.NetworkMessage
 }
 

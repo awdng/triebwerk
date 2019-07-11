@@ -2,14 +2,15 @@ package model
 
 import (
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // GameState ...
 type GameState struct {
 	StartTime   time.Time
-	PlayerCount uint8
-	Players     map[uint8]*Player
+	PlayerCount int64
+	Players     map[int]*Player
 	Map         *Map
 	mutex       *sync.Mutex
 }
@@ -18,7 +19,7 @@ type GameState struct {
 func NewGameState() *GameState {
 	return &GameState{
 		StartTime: time.Now(),
-		Players:   make(map[uint8]*Player),
+		Players:   make(map[int]*Player),
 		Map:       NewMap(),
 		mutex:     &sync.Mutex{},
 	}
@@ -39,4 +40,23 @@ func (g *GameState) GetPlayers() []*Player {
 	g.mutex.Unlock()
 
 	return players
+}
+
+// GetNewPlayerID ...
+func (g *GameState) GetNewPlayerID() int {
+	return int(atomic.AddInt64(&g.PlayerCount, 1))
+}
+
+// AddPlayer to the game
+func (g *GameState) AddPlayer(player *Player) {
+	g.mutex.Lock()
+	g.Players[player.ID] = player
+	g.mutex.Unlock()
+}
+
+// RemovePlayer from the game
+func (g *GameState) RemovePlayer(player *Player) {
+	g.mutex.Lock()
+	delete(g.Players, player.ID)
+	g.mutex.Unlock()
 }

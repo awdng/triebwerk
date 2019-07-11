@@ -2,7 +2,6 @@ package game
 
 import (
 	"log"
-	"sync"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
@@ -16,7 +15,6 @@ type Game struct {
 	networkManager *NetworkManager
 	playerManager  *PlayerManager
 	state          *model.GameState
-	mutex          *sync.Mutex
 }
 
 // NewGame creates a game instance
@@ -24,35 +22,28 @@ func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game
 	return &Game{
 		networkManager: networkManager,
 		playerManager:  playerManager,
-		mutex:          &sync.Mutex{},
 		state:          model.NewGameState(),
 	}
 }
 
 // RegisterPlayer registers a networked Player
 func (g *Game) RegisterPlayer(conn model.Connection) {
-	g.mutex.Lock()
-
-	g.state.PlayerCount++
-	player := g.playerManager.NewPlayer(g.state.PlayerCount, 10*float32(g.state.PlayerCount), 0, conn)
+	pID := g.state.GetNewPlayerID()
+	player := g.playerManager.NewPlayer(pID, 10*float32(pID), 0, conn)
 	g.networkManager.Register(player, g.state)
-	g.state.Players[g.state.PlayerCount] = player
+	g.state.AddPlayer(player)
 	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.PlayerCount)
-
-	g.mutex.Unlock()
 }
 
 // UnregisterPlayer of a networked game
 func (g *Game) UnregisterPlayer(conn model.Connection) {
-	g.mutex.Lock()
-	for _, p := range g.state.Players {
+	players := g.state.GetPlayers()
+	for _, p := range players {
 		if p.Client.Connection == conn {
-			g.state.PlayerCount--
-			delete(g.state.Players, p.ID)
+			g.state.RemovePlayer(p)
 			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.PlayerCount)
 		}
 	}
-	g.mutex.Unlock()
 }
 
 // Start the gameserver loop
