@@ -12,14 +12,8 @@ import (
 
 var players = make([]*model.Player, 0)
 var localPlayer *model.Player
-var shadowPlayer *model.Player
 var gamemap = model.NewMap()
 var controls = model.Controls{}
-
-func add(some js.Value, i []js.Value) interface{} {
-	js.Global().Set("output", js.ValueOf(i[0].Int()+i[1].Int()))
-	return (js.ValueOf(i[0].Int() + i[1].Int()).String())
-}
 
 func setInput(this js.Value, args []js.Value) interface{} {
 	controls.Forward = !(args[0].Int() == 0)
@@ -137,19 +131,6 @@ func createLocalPlayer(this js.Value, args []js.Value) interface{} {
 	return js.ValueOf(player.Collider.Pivot.Y)
 }
 
-func updateShadowPlayer(this js.Value, args []js.Value) interface{} {
-	x := float32(args[1].Float())
-	y := float32(args[2].Float())
-	rotation := float32(args[3].Float())
-	turretRotation := float32(args[4].Float())
-
-	shadowPlayer.Collider.ChangePosition(x, y)
-	shadowPlayer.Collider.Rotation = rotation
-	shadowPlayer.Collider.TurretRotation = turretRotation
-
-	return js.ValueOf(nil)
-}
-
 func createNetworkPlayer(this js.Value, args []js.Value) interface{} {
 	id := args[0].Int()
 	x := float32(args[1].Float())
@@ -185,6 +166,18 @@ func updateNetworkPlayer(this js.Value, args []js.Value) interface{} {
 	return js.ValueOf(nil)
 }
 
+func removePlayer(this js.Value, args []js.Value) interface{} {
+	id := args[0].Int()
+	newPlayers := make([]*model.Player, 0)
+	for _, p := range players {
+		if p.ID != id {
+			newPlayers = append(newPlayers, p)
+		}
+	}
+	players = newPlayers
+	return js.ValueOf(nil)
+}
+
 func getMap(some js.Value, i []js.Value) interface{} {
 	var uint8Array = js.Global().Get("Uint8Array")
 
@@ -205,7 +198,6 @@ func getMap(some js.Value, i []js.Value) interface{} {
 }
 
 func registerCallbacks() {
-	js.Global().Set("add", js.FuncOf(add))
 	js.Global().Set("getMap", js.FuncOf(getMap))
 	js.Global().Set("setInput", js.FuncOf(setInput))
 	js.Global().Set("applyInput", js.FuncOf(applyInput))
@@ -213,9 +205,9 @@ func registerCallbacks() {
 	js.Global().Set("createLocalPlayer", js.FuncOf(createLocalPlayer))
 	js.Global().Set("getLocalPlayerPosition", js.FuncOf(getLocalPlayerPosition))
 	js.Global().Set("createNetworkPlayer", js.FuncOf(createNetworkPlayer))
+	js.Global().Set("removePlayer", js.FuncOf(removePlayer))
 	js.Global().Set("updateNetworkPlayer", js.FuncOf(updateNetworkPlayer))
 	js.Global().Set("getPlayerState", js.FuncOf(getPlayerState))
-	js.Global().Set("updateShadowPlayer", js.FuncOf(updateShadowPlayer))
 }
 
 var proto protocol.BinaryProtocol

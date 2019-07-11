@@ -29,7 +29,8 @@ func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game
 // RegisterPlayer registers a networked Player
 func (g *Game) RegisterPlayer(conn model.Connection) {
 	pID := g.state.GetNewPlayerID()
-	player := g.playerManager.NewPlayer(pID, 10*float32(pID), 0, conn)
+	spawn := g.state.Map.GetRandomSpawn()
+	player := g.playerManager.NewPlayer(pID, spawn.X, spawn.Y, conn)
 	g.networkManager.Register(player, g.state)
 	g.state.AddPlayer(player)
 	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.PlayerCount)
@@ -42,6 +43,7 @@ func (g *Game) UnregisterPlayer(conn model.Connection) {
 		if p.Client.Connection == conn {
 			g.state.RemovePlayer(p)
 			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.PlayerCount)
+			break
 		}
 	}
 }

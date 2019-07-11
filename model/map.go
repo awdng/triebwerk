@@ -2,11 +2,14 @@ package model
 
 import (
 	"encoding/json"
+	"math/rand"
+	"time"
 )
 
 // Map represents a game map
 type Map struct {
 	Collider Polygon
+	Spawns   []*Point
 }
 
 // NewMap creates a new map object
@@ -16,8 +19,40 @@ func NewMap() *Map {
 	json.Unmarshal([]byte(config), &colliders)
 
 	return &Map{
+		Spawns: []*Point{
+			&Point{
+				X: 33.92122716470902,
+				Y: 19.696850953769385,
+			},
+			&Point{
+				X: 28.825795356963976,
+				Y: 37.811654746868406,
+			},
+			&Point{
+				X: 35.76508317625655,
+				Y: 96.37030297792447,
+			},
+			&Point{
+				X: -60.31281833122437,
+				Y: 25.988099670613494,
+			},
+			&Point{
+				X: -128.18862044178346,
+				Y: 27.185409609029083,
+			},
+			&Point{
+				X: -153.69567902314972,
+				Y: 112.68349326947794,
+			},
+		},
 		Collider: Polygon{
 			Points: colliders,
 		},
 	}
+}
+
+// GetRandomSpawn Point
+func (m *Map) GetRandomSpawn() *Point {
+	rand.Seed(time.Now().Unix())
+	return m.Spawns[rand.Intn(len(m.Spawns))]
 }
