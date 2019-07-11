@@ -15,17 +15,14 @@ help: ## Display this help
 	@ grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "    \033[36m%-10s\033[0m - %s\n", $$1, $$2}'
 	@ echo
 
-all: deps build ## Install dependencies and build binaries
+all: build ## Install dependencies and build binaries
 
 run: build
 	@export `cat ${mkfile_path}.env | xargs`; ./triebwerk
 
 tools: ## Install all necessary tools
-	GO111MODULE=off $(GO) get golang.org/x/tools/cmd/goimports
-	GO111MODULE=off $(GO) get -u golang.org/x/lint/golint
-
-deps: ## Install dependencies
-	dep ensure -vendor-only
+	GO111MODULE=on $(GO) get golang.org/x/tools/cmd/goimports
+	GO111MODULE=on $(GO) get -u golang.org/x/lint/golint
 
 fmt-check: ## Check formatting (goimports)
 	@ goimports -e -d -l $(GOFILES)

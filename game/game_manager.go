@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -62,14 +63,12 @@ func (g *Game) Start() error {
 
 func (g *Game) processInputs() {
 	// continously reading all player inputs
-	for {
+	ticker := time.NewTicker(1 * time.Millisecond)
+	for range ticker.C {
 		players := g.state.GetPlayers()
 		for _, p := range players {
 			select {
-			case message, ok := <-p.Client.NetworkIn:
-				if !ok {
-					continue
-				}
+			case message := <-p.Client.NetworkIn:
 				switch messageType := message.MessageType; messageType {
 				case 1:
 					p.Control = message.Body.(model.Controls)
@@ -88,6 +87,10 @@ func (g *Game) gameLoop() {
 	for range ticker.C {
 		g.tickStart = time.Now()
 		players := g.state.GetPlayers()
+		if float64(time.Now().Sub(g.tickStart))/float64(time.Millisecond) > 1 {
+			fmt.Println("Lock ", float64(time.Now().Sub(g.tickStart))/float64(time.Millisecond))
+		}
+
 		if len(players) == 0 {
 			continue
 		}
