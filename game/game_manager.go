@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -87,9 +86,7 @@ func (g *Game) gameLoop() {
 	for range ticker.C {
 		g.tickStart = time.Now()
 		players := g.state.GetPlayers()
-		if float64(time.Now().Sub(g.tickStart))/float64(time.Millisecond) > 1 {
-			fmt.Println("Lock ", float64(time.Now().Sub(g.tickStart))/float64(time.Millisecond))
-		}
+		// fmt.Println("Lock ", float64(time.Now().Sub(g.tickStart))/float64(time.Millisecond))
 
 		if len(players) == 0 {
 			continue

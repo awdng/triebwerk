@@ -49,14 +49,14 @@ func (g *GameState) GetNewPlayerID() int {
 
 // AddPlayer to the game
 func (g *GameState) AddPlayer(player *Player) {
-	// g.mutex.Lock()
+	g.mutex.Lock()
 	g.Players[player.ID] = player
-	// g.mutex.Unlock()
+	g.mutex.Unlock()
 }
 
 // RemovePlayer from the game
 func (g *GameState) RemovePlayer(player *Player) {
-	// g.mutex.Lock()
+	g.mutex.Lock()
 	delete(g.Players, player.ID)
-	// g.mutex.Unlock()
+	g.mutex.Unlock()
 }
