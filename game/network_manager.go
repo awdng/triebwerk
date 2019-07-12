@@ -107,6 +107,8 @@ func (n *NetworkManager) run() {
 			}
 		case message := <-n.broadcast:
 			for client := range n.clients {
+				// select is used to avoid blocking when a network output writer of a client is not ready
+				// client is disconnectet if network output channel buffer reaches maximum size
 				select {
 				case client.NetworkOut <- message:
 				default:

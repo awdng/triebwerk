@@ -33,7 +33,7 @@ func (g *Game) RegisterPlayer(conn model.Connection) {
 	player := g.playerManager.NewPlayer(pID, spawn.X, spawn.Y, conn)
 	g.networkManager.Register(player, g.state)
 	g.state.AddPlayer(player)
-	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.PlayerCount)
+	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.GetPlayerCount())
 }
 
 // UnregisterPlayer of a networked game
@@ -42,7 +42,7 @@ func (g *Game) UnregisterPlayer(conn model.Connection) {
 	for _, p := range players {
 		if p.Client.Connection == conn {
 			g.state.RemovePlayer(p)
-			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.PlayerCount)
+			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.GetPlayerCount())
 			break
 		}
 	}
@@ -61,7 +61,7 @@ func (g *Game) Start() error {
 }
 
 func (g *Game) processInputs() {
-	// continously reading all player inputs
+	// continously read all player inputs at 1000Hz
 	ticker := time.NewTicker(1 * time.Millisecond)
 	for range ticker.C {
 		players := g.state.GetPlayers()
@@ -73,9 +73,7 @@ func (g *Game) processInputs() {
 					p.Control = message.Body.(model.Controls)
 				case 5:
 					g.networkManager.SendTime(p, g.state, &message)
-				default:
 				}
-			default:
 			}
 		}
 	}

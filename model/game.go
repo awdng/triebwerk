@@ -9,7 +9,8 @@ import (
 // GameState ...
 type GameState struct {
 	StartTime   time.Time
-	PlayerCount int64
+	PlayerID    int64
+	PlayerCount int
 	Players     map[int]*Player
 	Map         *Map
 	mutex       *sync.Mutex
@@ -42,15 +43,24 @@ func (g *GameState) GetPlayers() []*Player {
 	return players
 }
 
+// GetPlayerCount ...
+func (g *GameState) GetPlayerCount() int {
+	g.mutex.Lock()
+	c := g.PlayerCount
+	g.mutex.Unlock()
+	return c
+}
+
 // GetNewPlayerID ...
 func (g *GameState) GetNewPlayerID() int {
-	return int(atomic.AddInt64(&g.PlayerCount, 1))
+	return int(atomic.AddInt64(&g.PlayerID, 1))
 }
 
 // AddPlayer to the game
 func (g *GameState) AddPlayer(player *Player) {
 	g.mutex.Lock()
 	g.Players[player.ID] = player
+	g.PlayerCount++
 	g.mutex.Unlock()
 }
 
@@ -58,5 +68,6 @@ func (g *GameState) AddPlayer(player *Player) {
 func (g *GameState) RemovePlayer(player *Player) {
 	g.mutex.Lock()
 	delete(g.Players, player.ID)
+	g.PlayerCount--
 	g.mutex.Unlock()
 }
