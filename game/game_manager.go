@@ -80,11 +80,12 @@ func (g *Game) processInputs() {
 }
 
 func (g *Game) gameLoop() {
-	ticker := time.NewTicker(33 * time.Millisecond)
+	interval := time.Duration(int(1000/tickrate)) * time.Millisecond
+	ticker := time.NewTicker(interval)
+	timestep := float32(interval) / 1000
 	for range ticker.C {
-		g.tickStart = time.Now()
+		// g.tickStart = time.Now()
 		players := g.state.GetPlayers()
-		// fmt.Println("Lock ", float64(time.Now().Sub(g.tickStart))/float64(time.Millisecond))
 
 		if len(players) == 0 {
 			continue
@@ -92,7 +93,7 @@ func (g *Game) gameLoop() {
 
 		// apply latest client inputs
 		for _, p := range players {
-			p.ApplyMovement(p.Control, players, g.state.Map, float32(0.033))
+			p.ApplyMovement(p.Control, players, g.state.Map, timestep)
 		}
 
 		// broadcast game state to clients

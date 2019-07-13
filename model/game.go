@@ -13,7 +13,7 @@ type GameState struct {
 	PlayerCount int
 	Players     map[int]*Player
 	Map         *Map
-	mutex       *sync.Mutex
+	mutex       *sync.RWMutex
 }
 
 // NewGameState ...
@@ -22,7 +22,7 @@ func NewGameState() *GameState {
 		StartTime: time.Now(),
 		Players:   make(map[int]*Player),
 		Map:       NewMap(),
-		mutex:     &sync.Mutex{},
+		mutex:     &sync.RWMutex{},
 	}
 }
 
@@ -34,20 +34,20 @@ func (g *GameState) GameTime() uint32 {
 // GetPlayers returns the PlayerList
 func (g *GameState) GetPlayers() []*Player {
 	players := make([]*Player, 0)
-	g.mutex.Lock()
+	g.mutex.RLock()
 	for _, p := range g.Players {
 		players = append(players, p)
 	}
-	g.mutex.Unlock()
+	g.mutex.RUnlock()
 
 	return players
 }
 
 // GetPlayerCount ...
 func (g *GameState) GetPlayerCount() int {
-	g.mutex.Lock()
+	g.mutex.RLock()
 	c := g.PlayerCount
-	g.mutex.Unlock()
+	g.mutex.RUnlock()
 	return c
 }
 

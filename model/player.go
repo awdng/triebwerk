@@ -88,8 +88,6 @@ func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map, dt 
 
 	rotationDelta := r.Rotation - r.LastRotation
 	turretRotationDelta := r.TurretRotation - r.TurretLastRotation
-	//r.Rotation = NormalizeAngle(float64(r.Rotation))
-	//r.TurretRotation = NormalizeAngle(float64(r.TurretRotation))
 
 	r.rotateRectPoint(rotationDelta, r.Rect.A)
 	r.rotateRectPoint(rotationDelta, r.Rect.B)
@@ -136,8 +134,6 @@ func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map, dt 
 	r.TurretLastRotation = r.TurretRotation
 
 	p.Control = controls
-
-	// fmt.Printf("%f %f \n", p.Collider.Pivot.X, p.Collider.Pivot.Y)
 }
 
 // Client represents a network client
