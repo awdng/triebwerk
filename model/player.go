@@ -31,6 +31,7 @@ type Controls struct {
 // Player ...
 type Player struct {
 	ID       int
+	Health   int
 	Control  Controls
 	Collider *RectCollider
 	Client   *Client

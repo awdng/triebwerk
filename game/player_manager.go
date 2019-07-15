@@ -18,6 +18,7 @@ func NewPlayerManager() *PlayerManager {
 func (p *PlayerManager) NewPlayer(id int, x float32, y float32, conn model.Connection) *model.Player {
 	return &model.Player{
 		ID:       id,
+		Health:   100,
 		Collider: model.NewRectCollider(x, y, width, depth),
 		Client: &model.Client{
 			NetworkOut: make(chan []byte, 100),

@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -38,9 +39,11 @@ func (g *Game) RegisterPlayer(conn model.Connection) {
 
 // UnregisterPlayer of a networked game
 func (g *Game) UnregisterPlayer(conn model.Connection) {
+	fmt.Println("Remove player called")
 	players := g.state.GetPlayers()
 	for _, p := range players {
 		if p.Client.Connection == conn {
+			fmt.Println("Remove player found")
 			g.state.RemovePlayer(p)
 			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.GetPlayerCount())
 			break
@@ -86,7 +89,7 @@ func (g *Game) gameLoop() {
 	ticker := time.NewTicker(interval)
 	timestep := float32(interval/time.Millisecond) / 1000
 	for range ticker.C {
-		// g.tickStart = time.Now()
+		g.tickStart = time.Now()
 		players := g.state.GetPlayers()
 
 		if len(players) == 0 {

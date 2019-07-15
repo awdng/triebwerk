@@ -113,8 +113,7 @@ func (n *NetworkManager) run() {
 				case client.NetworkOut <- message:
 				default:
 					log.Printf("NetworkManager: Closing connection of Client %s: Could not write to NetworkOut channel, buffer size %d", client.Connection.Identifier(), len(client.NetworkOut))
-					client.Disconnect()
-					delete(n.clients, client)
+					n.unregister <- client
 				}
 			}
 		}
