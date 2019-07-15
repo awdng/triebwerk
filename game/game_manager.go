@@ -73,7 +73,9 @@ func (g *Game) processInputs() {
 					p.Control = message.Body.(model.Controls)
 				case 5:
 					g.networkManager.SendTime(p, g.state, &message)
+				default:
 				}
+			default:
 			}
 		}
 	}
