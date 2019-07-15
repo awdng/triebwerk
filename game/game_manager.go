@@ -82,7 +82,7 @@ func (g *Game) processInputs() {
 func (g *Game) gameLoop() {
 	interval := time.Duration(int(1000/tickrate)) * time.Millisecond
 	ticker := time.NewTicker(interval)
-	timestep := float32(interval) / 1000
+	timestep := float32(interval/time.Millisecond) / 1000
 	for range ticker.C {
 		// g.tickStart = time.Now()
 		players := g.state.GetPlayers()
