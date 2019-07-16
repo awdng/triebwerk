@@ -1,14 +1,13 @@
 package game
 
 import (
-	"fmt"
 	"log"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
 )
 
-const tickrate = 66
+const tickrate = 30
 
 // Game represents the game state
 type Game struct {
@@ -39,11 +38,9 @@ func (g *Game) RegisterPlayer(conn model.Connection) {
 
 // UnregisterPlayer of a networked game
 func (g *Game) UnregisterPlayer(conn model.Connection) {
-	fmt.Println("Remove player called")
 	players := g.state.GetPlayers()
 	for _, p := range players {
 		if p.Client.Connection == conn {
-			fmt.Println("Remove player found")
 			g.state.RemovePlayer(p)
 			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.GetPlayerCount())
 			break
@@ -99,7 +96,7 @@ func (g *Game) gameLoop() {
 		// apply latest client inputs
 		for _, p := range players {
 			p.ApplyMovement(p.Control, players, g.state.Map, timestep)
-			p.Shooting(p.Control)
+			p.Shooting(p.Control, players, g.state.Map, timestep)
 		}
 
 		// broadcast game state to clients

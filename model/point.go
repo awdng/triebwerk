@@ -13,10 +13,25 @@ func (p *Point) directionTo(v *Point) *Point {
 		X: 0,
 		Y: 0,
 	}
-	dir.X = v.X - p.X
-	dir.Y = v.Y - p.Y
+	dir.X = p.X - v.X
+	dir.Y = p.Y - v.Y
 	normalize(dir)
 	return dir
+}
+
+// IsInPolygon adapted from http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+func (p *Point) IsInPolygon(polygon []*Point) bool {
+	// add first element as last point again
+	polygon = append(polygon, polygon[0])
+	inside := false
+	j := 0
+	for i := 1; i < len(polygon); i++ {
+		if (polygon[i].Y > p.Y) != (polygon[j].Y > p.Y) && p.X < (polygon[j].X-polygon[i].X)*(p.Y-polygon[i].Y)/(polygon[j].Y-polygon[i].Y)+polygon[i].X {
+			inside = !inside
+		}
+		j = i
+	}
+	return inside
 }
 
 func normalize(v *Point) {

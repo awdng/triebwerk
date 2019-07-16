@@ -39,13 +39,24 @@ type Player struct {
 }
 
 // Shooting ...
-func (p *Player) Shooting(controls Controls) {
+func (p *Player) Shooting(controls Controls, players []*Player, m *Map, dt float32) {
 	// move projectiles
 	for _, b := range p.Bullets {
-		b.Position.X += b.Direction.X * 5
-		b.Position.Y += b.Direction.Y * 5
+		b.Position.X += b.Direction.X * 100 * dt
+		b.Position.Y += b.Direction.Y * 100 * dt
 
-		fmt.Println(b.Position, b.Direction)
+		// check bullet collision
+		for _, enemy := range players {
+			if p.ID == enemy.ID {
+				continue
+			}
+			enemyPolygon := Polygon{
+				Points: []*Point{enemy.Collider.Rect.A, enemy.Collider.Rect.B, enemy.Collider.Rect.C, enemy.Collider.Rect.D},
+			}
+			if b.Position.IsInPolygon(enemyPolygon.Points) {
+				fmt.Println("OMG HIT!")
+			}
+		}
 	}
 
 	// create new projectile
@@ -58,7 +69,6 @@ func (p *Player) Shooting(controls Controls) {
 		}
 		bullet.Direction = bullet.Position.directionTo(p.Collider.Pivot)
 		p.Bullets = append(p.Bullets, bullet)
-		fmt.Println("creatign bullet at ", bullet.Position)
 	}
 }
 
