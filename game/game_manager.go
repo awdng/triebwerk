@@ -8,7 +8,7 @@ import (
 	"github.com/awdng/triebwerk/model"
 )
 
-const tickrate = 30
+const tickrate = 66
 
 // Game represents the game state
 type Game struct {
@@ -99,6 +99,7 @@ func (g *Game) gameLoop() {
 		// apply latest client inputs
 		for _, p := range players {
 			p.ApplyMovement(p.Control, players, g.state.Map, timestep)
+			p.Shooting(p.Control)
 		}
 
 		// broadcast game state to clients

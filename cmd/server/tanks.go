@@ -45,8 +45,8 @@ func applyInput(this js.Value, args []js.Value) interface{} {
 
 	binary.LittleEndian.PutUint32(posX[:], math.Float32bits(p.Collider.Pivot.X))
 	binary.LittleEndian.PutUint32(posY[:], math.Float32bits(p.Collider.Pivot.Y))
-	binary.LittleEndian.PutUint32(lookX[:], math.Float32bits(p.Collider.Look.X))
-	binary.LittleEndian.PutUint32(lookY[:], math.Float32bits(p.Collider.Look.Y))
+	binary.LittleEndian.PutUint32(lookX[:], math.Float32bits(p.Collider.Turret.X))
+	binary.LittleEndian.PutUint32(lookY[:], math.Float32bits(p.Collider.Turret.Y))
 	binary.LittleEndian.PutUint32(rotation[:], math.Float32bits(p.Collider.Rotation))
 	binary.LittleEndian.PutUint32(turretRotation[:], math.Float32bits(p.Collider.TurretRotation))
 
@@ -87,8 +87,8 @@ func getPlayerState(this js.Value, args []js.Value) interface{} {
 
 	binary.LittleEndian.PutUint32(posX[:], math.Float32bits(player.Collider.Pivot.X))
 	binary.LittleEndian.PutUint32(posY[:], math.Float32bits(player.Collider.Pivot.Y))
-	binary.LittleEndian.PutUint32(lookX[:], math.Float32bits(player.Collider.Look.X))
-	binary.LittleEndian.PutUint32(lookY[:], math.Float32bits(player.Collider.Look.Y))
+	binary.LittleEndian.PutUint32(lookX[:], math.Float32bits(player.Collider.Turret.X))
+	binary.LittleEndian.PutUint32(lookY[:], math.Float32bits(player.Collider.Turret.Y))
 	binary.LittleEndian.PutUint32(rotation[:], math.Float32bits(player.Collider.Rotation))
 	binary.LittleEndian.PutUint32(turretRotation[:], math.Float32bits(player.Collider.TurretRotation))
 

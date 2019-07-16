@@ -32,9 +32,34 @@ type Controls struct {
 type Player struct {
 	ID       int
 	Health   int
+	Bullets  []*Bullet
 	Control  Controls
 	Collider *RectCollider
 	Client   *Client
+}
+
+// Shooting ...
+func (p *Player) Shooting(controls Controls) {
+	// move projectiles
+	for _, b := range p.Bullets {
+		b.Position.X += b.Direction.X * 5
+		b.Position.Y += b.Direction.Y * 5
+
+		fmt.Println(b.Position, b.Direction)
+	}
+
+	// create new projectile
+	if controls.Shoot {
+		bullet := &Bullet{
+			Position: &Point{
+				X: p.Collider.Turret.X,
+				Y: p.Collider.Turret.Y,
+			},
+		}
+		bullet.Direction = bullet.Position.directionTo(p.Collider.Pivot)
+		p.Bullets = append(p.Bullets, bullet)
+		fmt.Println("creatign bullet at ", bullet.Position)
+	}
 }
 
 // ApplyMovement applies the movement input
