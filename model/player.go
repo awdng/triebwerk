@@ -40,24 +40,32 @@ type Player struct {
 
 // Shooting ...
 func (p *Player) Shooting(controls Controls, players []*Player, m *Map, dt float32) {
-	// move projectiles
-	for _, b := range p.Bullets {
-		b.Position.X += b.Direction.X * 100 * dt
-		b.Position.Y += b.Direction.Y * 100 * dt
+	bulletHits := make([]int, 0)
+	for i, b := range p.Bullets {
+		b.ApplyMovement(dt)
 
 		// check bullet collision
 		for _, enemy := range players {
 			if p.ID == enemy.ID {
 				continue
 			}
-			enemyPolygon := Polygon{
-				Points: []*Point{enemy.Collider.Rect.A, enemy.Collider.Rect.B, enemy.Collider.Rect.C, enemy.Collider.Rect.D},
-			}
-			if b.Position.IsInPolygon(enemyPolygon.Points) {
-				fmt.Println("OMG HIT!")
+			if b.IsCollidingWithPlayer(enemy) {
+				bulletHits = append(bulletHits, i)
+				enemy.Health -= 25
+				if enemy.Health < 0 {
+					enemy.Health = 0
+				}
 			}
 		}
 	}
+
+	// remove bullets that hit a target
+	for _, remove := range bulletHits {
+		p.Bullets[remove] = p.Bullets[len(p.Bullets)-1]
+		p.Bullets[len(p.Bullets)-1] = nil
+		p.Bullets = p.Bullets[:len(p.Bullets)-1]
+	}
+	bulletHits = bulletHits[:0]
 
 	// create new projectile
 	if controls.Shoot {
