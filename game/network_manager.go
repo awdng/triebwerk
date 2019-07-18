@@ -28,7 +28,7 @@ const (
 	spawn MessageType = iota
 	position
 	register
-	bullet
+	projectile
 	hit
 	serverTime
 )

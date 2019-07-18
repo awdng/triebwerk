@@ -16,6 +16,8 @@ type Connection interface {
 	Identifier() string
 }
 
+const respawnTime = 3
+
 // Controls ...
 type Controls struct {
 	Forward     bool
@@ -30,65 +32,90 @@ type Controls struct {
 
 // Player ...
 type Player struct {
-	ID       int
-	Health   int
-	Bullets  []*Bullet
-	Control  Controls
-	Collider *RectCollider
-	Client   *Client
+	ID               int
+	Health           int
+	respawnCountdown float32
+	Projectiles      []*Projectile
+	Control          Controls
+	Collider         *RectCollider
+	Client           *Client
+}
+
+// Update Tick for Player
+func (p *Player) Update(players []*Player, game *GameState, dt float32) {
+	m := game.Map
+	p.handleMovement(players, m, dt)
+	p.handleWeapons(players, m, dt)
+
+	if p.Health == 0 {
+		p.respawnCountdown += dt
+	}
+}
+
+// HandleRespawn ...
+func (p *Player) HandleRespawn(game *GameState) {
+	m := game.Map
+	if !p.IsAlive() && p.respawnCountdown > respawnTime {
+		p.Health = 100
+		p.respawnCountdown = 0
+
+		spawn := m.GetRandomSpawn()
+		p.Collider.ChangePosition(spawn.X, spawn.Y)
+		p.Collider.Rotation = 0
+		p.Collider.TurretRotation = 0
+	}
 }
 
 // Shooting ...
-func (p *Player) Shooting(controls Controls, players []*Player, m *Map, dt float32) {
-	bulletHits := make([]int, 0)
-	for i, b := range p.Bullets {
+func (p *Player) handleWeapons(players []*Player, m *Map, dt float32) {
+	for _, b := range p.Projectiles {
 		b.ApplyMovement(dt)
-
-		// check bullet collision
+		// check projectile collision
 		for _, enemy := range players {
-			if p.ID == enemy.ID {
+			if p.ID == enemy.ID || !enemy.IsAlive() {
 				continue
 			}
 			if b.IsCollidingWithPlayer(enemy) {
-				bulletHits = append(bulletHits, i)
 				enemy.Health -= 25
 				if enemy.Health < 0 {
 					enemy.Health = 0
 				}
+				b = nil
+				break
 			}
 		}
 	}
 
-	// remove bullets that hit a target
-	for _, remove := range bulletHits {
-		p.Bullets[remove] = p.Bullets[len(p.Bullets)-1]
-		p.Bullets[len(p.Bullets)-1] = nil
-		p.Bullets = p.Bullets[:len(p.Bullets)-1]
+	// remove projectiles that hit a target
+	newProjectiles := make([]*Projectile, 0)
+	for _, projectile := range p.Projectiles {
+		if projectile != nil {
+			newProjectiles = append(newProjectiles, projectile)
+		}
 	}
-	bulletHits = bulletHits[:0]
+	p.Projectiles = newProjectiles
 
 	// create new projectile
-	if controls.Shoot {
-		bullet := &Bullet{
+	if p.Control.Shoot {
+		projectile := &Projectile{
 			Position: &Point{
 				X: p.Collider.Turret.X,
 				Y: p.Collider.Turret.Y,
 			},
 		}
-		bullet.Direction = bullet.Position.directionTo(p.Collider.Pivot)
-		p.Bullets = append(p.Bullets, bullet)
+		projectile.Direction = projectile.Position.directionTo(p.Collider.Pivot)
+		p.Projectiles = append(p.Projectiles, projectile)
 	}
 }
 
-// ApplyMovement applies the movement input
-func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map, dt float32) {
+func (p *Player) handleMovement(players []*Player, m *Map, dt float32) {
 	r := p.Collider
 
 	//check collision of this player against other players
 	r.CollisionFront = false
 	r.CollisionBack = false
 	for _, enemy := range players {
-		if p.ID == enemy.ID {
+		if p.ID == enemy.ID || !enemy.IsAlive() {
 			continue
 		}
 		r.collisionFrontRect(*enemy.Collider)
@@ -112,21 +139,21 @@ func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map, dt 
 		r.Velocity = 0
 	}
 
-	if controls.Right {
+	if p.Control.Right {
 		r.Rotation += 1.5 * dt
 		r.TurretRotation += 1.5 * dt
 	}
 
-	if controls.Left {
+	if p.Control.Left {
 		r.Rotation -= 1.5 * dt
 		r.TurretRotation -= 1.5 * dt
 	}
 
-	if controls.TurretRight {
+	if p.Control.TurretRight {
 		r.TurretRotation -= 1.5 * dt
 	}
 
-	if controls.TurretLeft {
+	if p.Control.TurretLeft {
 		r.TurretRotation += 1.5 * dt
 	}
 
@@ -143,11 +170,11 @@ func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map, dt 
 	r.CalcDirection()
 
 	movement := 0
-	if controls.Forward && !r.CollisionFront {
+	if p.Control.Forward && !r.CollisionFront {
 		movement = 1
 		r.Velocity += 15 * dt
 	}
-	if controls.Backward && !r.CollisionBack {
+	if p.Control.Backward && !r.CollisionBack {
 		movement = -1
 		r.Velocity -= 15 * dt
 	}
@@ -176,8 +203,14 @@ func (p *Player) ApplyMovement(controls Controls, players []*Player, m *Map, dt 
 	}
 	r.LastRotation = r.Rotation
 	r.TurretLastRotation = r.TurretRotation
+}
 
-	p.Control = controls
+// IsAlive ...
+func (p *Player) IsAlive() bool {
+	if p.Health == 0 {
+		return false
+	}
+	return true
 }
 
 // Client represents a network client

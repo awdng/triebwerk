@@ -12,7 +12,7 @@ import (
 
 var players = make([]*model.Player, 0)
 var localPlayer *model.Player
-var gamemap = model.NewMap()
+var gameState = model.NewGameState()
 var controls = model.Controls{}
 
 func setInput(this js.Value, args []js.Value) interface{} {
@@ -30,8 +30,8 @@ func applyInput(this js.Value, args []js.Value) interface{} {
 	if localPlayer == nil {
 		return js.ValueOf(nil)
 	}
-
-	localPlayer.ApplyMovement(controls, players, gamemap, float32(args[0].Float()))
+	localPlayer.Control = controls
+	localPlayer.Update(players, gameState, float32(args[0].Float()))
 
 	var uint8Array = js.Global().Get("Uint8Array")
 	p := localPlayer
@@ -108,10 +108,6 @@ func getLocalPlayerPosition(this js.Value, args []js.Value) interface{} {
 	return js.ValueOf(fmt.Sprint("%f %f", localPlayer.Collider.Pivot.X, localPlayer.Collider.Pivot.Y)).String()
 }
 
-func checkCollision(this js.Value, args []js.Value) interface{} {
-	return js.ValueOf(args[0].Float())
-}
-
 func createLocalPlayer(this js.Value, args []js.Value) interface{} {
 	id := args[0].Int()
 	x := float32(args[1].Float())
@@ -185,7 +181,7 @@ func getMap(some js.Value, i []js.Value) interface{} {
 	x := make([]byte, 4)
 	y := make([]byte, 4)
 
-	for _, point := range gamemap.Collider.Points {
+	for _, point := range gameState.Map.Collider.Points {
 		binary.LittleEndian.PutUint32(x[:], math.Float32bits(point.X))
 		binary.LittleEndian.PutUint32(y[:], math.Float32bits(point.Y))
 		src = append(src, x...)
@@ -201,7 +197,6 @@ func registerCallbacks() {
 	js.Global().Set("getMap", js.FuncOf(getMap))
 	js.Global().Set("setInput", js.FuncOf(setInput))
 	js.Global().Set("applyInput", js.FuncOf(applyInput))
-	js.Global().Set("checkCollision", js.FuncOf(checkCollision))
 	js.Global().Set("createLocalPlayer", js.FuncOf(createLocalPlayer))
 	js.Global().Set("getLocalPlayerPosition", js.FuncOf(getLocalPlayerPosition))
 	js.Global().Set("createNetworkPlayer", js.FuncOf(createNetworkPlayer))

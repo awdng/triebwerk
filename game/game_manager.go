@@ -95,8 +95,8 @@ func (g *Game) gameLoop() {
 
 		// apply latest client inputs
 		for _, p := range players {
-			p.ApplyMovement(p.Control, players, g.state.Map, timestep)
-			p.Shooting(p.Control, players, g.state.Map, timestep)
+			p.Update(players, g.state, timestep)
+			p.HandleRespawn(g.state)
 		}
 
 		// broadcast game state to clients

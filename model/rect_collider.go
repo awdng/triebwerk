@@ -128,6 +128,9 @@ func (r *RectCollider) ChangePosition(posX, posY float32) {
 	r.Look.X += dX
 	r.Look.Y += dY
 
+	r.Turret.X += dX
+	r.Turret.Y += dY
+
 	r.Rect.A.X += dX
 	r.Rect.A.Y += dY
 
