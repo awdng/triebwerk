@@ -17,6 +17,8 @@ type Connection interface {
 }
 
 const respawnTime = 3
+const width = 5
+const depth = 7
 
 // Controls ...
 type Controls struct {
@@ -35,10 +37,26 @@ type Player struct {
 	ID               int
 	Health           int
 	respawnCountdown float32
-	Projectiles      []*Projectile
+	Weapons          []*Weapon
 	Control          Controls
 	Collider         *RectCollider
 	Client           *Client
+}
+
+// NewPlayer creates a new player object
+func NewPlayer(id int, x float32, y float32, conn Connection) *Player {
+	player := &Player{
+		ID:       id,
+		Health:   100,
+		Collider: NewRectCollider(x, y, width, depth),
+		Client: &Client{
+			NetworkOut: make(chan []byte, 100),
+			NetworkIn:  make(chan NetworkMessage, 100),
+			Connection: conn,
+		},
+	}
+	player.Weapons = []*Weapon{NewWeapon(player)}
+	return player
 }
 
 // Update Tick for Player
@@ -68,43 +86,13 @@ func (p *Player) HandleRespawn(game *GameState) {
 
 // Shooting ...
 func (p *Player) handleWeapons(players []*Player, m *Map, dt float32) {
-	for _, b := range p.Projectiles {
-		b.ApplyMovement(dt)
-		// check projectile collision
-		for _, enemy := range players {
-			if p.ID == enemy.ID || !enemy.IsAlive() {
-				continue
-			}
-			if b.IsCollidingWithPlayer(enemy) {
-				enemy.Health -= 25
-				if enemy.Health < 0 {
-					enemy.Health = 0
-				}
-				b = nil
-				break
-			}
-		}
+	for _, w := range p.Weapons {
+		w.Update(players, m, dt)
 	}
-
-	// remove projectiles that hit a target
-	newProjectiles := make([]*Projectile, 0)
-	for _, projectile := range p.Projectiles {
-		if projectile != nil {
-			newProjectiles = append(newProjectiles, projectile)
-		}
-	}
-	p.Projectiles = newProjectiles
 
 	// create new projectile
 	if p.Control.Shoot {
-		projectile := &Projectile{
-			Position: &Point{
-				X: p.Collider.Turret.X,
-				Y: p.Collider.Turret.Y,
-			},
-		}
-		projectile.Direction = projectile.Position.directionTo(p.Collider.Pivot)
-		p.Projectiles = append(p.Projectiles, projectile)
+		p.Weapons[0].ShootAt(p.Collider.Turret.X, p.Collider.Turret.Y)
 	}
 }
 

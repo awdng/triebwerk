@@ -4,6 +4,7 @@ package model
 type Projectile struct {
 	Position  *Point
 	Direction *Point
+	Cleanup   bool
 }
 
 // ApplyMovement ...

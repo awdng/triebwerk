@@ -30,7 +30,7 @@ func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game
 func (g *Game) RegisterPlayer(conn model.Connection) {
 	pID := g.state.GetNewPlayerID()
 	spawn := g.state.Map.GetRandomSpawn()
-	player := g.playerManager.NewPlayer(pID, spawn.X, spawn.Y, conn)
+	player := model.NewPlayer(pID, spawn.X, spawn.Y, conn)
 	g.networkManager.Register(player, g.state)
 	g.state.AddPlayer(player)
 	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.GetPlayerCount())

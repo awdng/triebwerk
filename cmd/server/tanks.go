@@ -117,10 +117,7 @@ func createLocalPlayer(this js.Value, args []js.Value) interface{} {
 
 	fmt.Printf("%f %f %f %f \n", x, y, width, depth)
 
-	player := &model.Player{
-		ID:       id,
-		Collider: model.NewRectCollider(x, y, width, depth),
-	}
+	player := model.NewPlayer(id, x, y, nil)
 
 	localPlayer = player
 	players = append(players, player)
@@ -131,13 +128,8 @@ func createNetworkPlayer(this js.Value, args []js.Value) interface{} {
 	id := args[0].Int()
 	x := float32(args[1].Float())
 	y := float32(args[2].Float())
-	width := float32(args[3].Float())
-	depth := float32(args[4].Float())
 
-	player := &model.Player{
-		ID:       id,
-		Collider: model.NewRectCollider(x, y, width, depth),
-	}
+	player := model.NewPlayer(id, x, y, nil)
 
 	players = append(players, player)
 	return js.ValueOf(nil)
