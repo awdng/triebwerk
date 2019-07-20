@@ -107,28 +107,32 @@ func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 		if p.ID == enemy.ID || !enemy.IsAlive() {
 			continue
 		}
-		r.collisionFrontRect(*enemy.Collider)
-		r.collisionBackRect(*enemy.Collider)
-
-		if r.CollisionFront || r.CollisionBack {
-			break
-		}
-	}
-
-	//check collision of this player against the environment
-	if !r.CollisionFront {
-		for _, collider := range m.Collider {
-			r.collisionFront(collider)
+		if r.collisionPolygon(enemy.Collider.getPolygon()) { // simple check if polygons intersect
+			r.collisionFrontRect(*enemy.Collider)
 			if r.CollisionFront {
+				break
+			}
+
+			r.collisionBackRect(*enemy.Collider)
+			if r.CollisionBack {
 				break
 			}
 		}
 	}
-	if !r.CollisionBack {
+
+	//check collision of this player against the environment
+	if !r.CollisionFront && !r.CollisionBack { // only if not already colliding with player
 		for _, collider := range m.Collider {
-			r.collisionBack(collider)
-			if r.CollisionBack {
-				break
+			if r.collisionPolygon(collider) { // simple check if polygons intersect
+				// check if collision occured front or back
+				r.collisionFront(collider)
+				if r.CollisionFront {
+					break
+				}
+				r.collisionBack(collider)
+				if r.CollisionBack {
+					break
+				}
 			}
 		}
 	}

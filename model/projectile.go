@@ -24,3 +24,14 @@ func (b *Projectile) IsCollidingWithPlayer(player *Player) bool {
 
 	return false
 }
+
+// IsCollidingWithEnvironment ...
+func (b *Projectile) IsCollidingWithEnvironment(m *Map) bool {
+	for _, collider := range m.Collider {
+		if b.Position.IsInPolygon(collider.Points) {
+			return true
+		}
+	}
+
+	return false
+}

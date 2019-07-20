@@ -145,6 +145,19 @@ func (r *RectCollider) ChangePosition(posX, posY float32) {
 	r.Rect.D.Y += dY
 }
 
+func (r *RectCollider) getPolygon() Polygon {
+	return Polygon{
+		Points: []*Point{r.Rect.A, r.Rect.B, r.Rect.C, r.Rect.D},
+	}
+}
+
+func (r *RectCollider) collisionPolygon(otherPolygon Polygon) bool {
+	if r.doPolygonsIntersect(r.getPolygon(), otherPolygon) {
+		return true
+	}
+	return false
+}
+
 func (r *RectCollider) collisionFrontRect(other RectCollider) {
 	otherPolygon := Polygon{
 		Points: []*Point{other.Rect.A, other.Rect.B, other.Rect.C, other.Rect.D},
