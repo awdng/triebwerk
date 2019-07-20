@@ -19,6 +19,5 @@ func main() {
 	transport.UnregisterConnHandler(gameManager.UnregisterPlayer)
 
 	// start game server
-
 	log.Fatal(gameManager.Start())
 }

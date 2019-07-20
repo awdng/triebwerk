@@ -34,7 +34,7 @@ func (w *Weapon) Update(players []*Player, m *Map, dt float32) {
 					enemy.Health = 0
 				}
 				b.Cleanup = true
-				break
+				break // projectile can only hit once
 			}
 		}
 	}
@@ -50,6 +50,7 @@ func (w *Weapon) Update(players []*Player, m *Map, dt float32) {
 
 	if !w.ready {
 		w.readyCountdown += dt
+		w.owner.Control.Shoot = false
 	}
 	if w.readyCountdown > readyTime {
 		w.ready = true
@@ -67,7 +68,7 @@ func (w *Weapon) ShootAt(posX float32, posY float32) {
 			},
 			Cleanup: false,
 		}
-		projectile.Direction = projectile.Position.directionTo(w.owner.Collider.Pivot)
+		projectile.Direction = projectile.Position.DirectionTo(w.owner.Collider.Pivot)
 		w.Projectiles = append(w.Projectiles, projectile)
 		w.ready = false
 	}

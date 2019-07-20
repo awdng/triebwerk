@@ -62,8 +62,8 @@ func NewPlayer(id int, x float32, y float32, conn Connection) *Player {
 // Update Tick for Player
 func (p *Player) Update(players []*Player, game *GameState, dt float32) {
 	m := game.Map
-	p.handleMovement(players, m, dt)
-	p.handleWeapons(players, m, dt)
+	p.HandleMovement(players, m, dt)
+	p.HandleWeapons(players, m, dt)
 
 	if p.Health == 0 {
 		p.respawnCountdown += dt
@@ -84,8 +84,8 @@ func (p *Player) HandleRespawn(game *GameState) {
 	}
 }
 
-// Shooting ...
-func (p *Player) handleWeapons(players []*Player, m *Map, dt float32) {
+// HandleWeapons ...
+func (p *Player) HandleWeapons(players []*Player, m *Map, dt float32) {
 	for _, w := range p.Weapons {
 		w.Update(players, m, dt)
 	}
@@ -96,7 +96,8 @@ func (p *Player) handleWeapons(players []*Player, m *Map, dt float32) {
 	}
 }
 
-func (p *Player) handleMovement(players []*Player, m *Map, dt float32) {
+// HandleMovement ...
+func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 	r := p.Collider
 
 	//check collision of this player against other players
@@ -116,10 +117,20 @@ func (p *Player) handleMovement(players []*Player, m *Map, dt float32) {
 
 	//check collision of this player against the environment
 	if !r.CollisionFront {
-		r.collisionFront(m.Collider)
+		for _, collider := range m.Collider {
+			r.collisionFront(collider)
+			if r.CollisionFront {
+				break
+			}
+		}
 	}
 	if !r.CollisionBack {
-		r.collisionBack(m.Collider)
+		for _, collider := range m.Collider {
+			r.collisionBack(collider)
+			if r.CollisionBack {
+				break
+			}
+		}
 	}
 
 	r.Velocity -= float32(15*1.5) * dt

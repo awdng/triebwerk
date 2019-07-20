@@ -8,7 +8,8 @@ type Point struct {
 	Y float32 `json:"y"`
 }
 
-func (p *Point) directionTo(v *Point) *Point {
+// DirectionTo ...
+func (p *Point) DirectionTo(v *Point) *Point {
 	dir := &Point{
 		X: 0,
 		Y: 0,

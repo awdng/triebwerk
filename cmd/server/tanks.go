@@ -31,7 +31,7 @@ func applyInput(this js.Value, args []js.Value) interface{} {
 		return js.ValueOf(nil)
 	}
 	localPlayer.Control = controls
-	localPlayer.Update(players, gameState, float32(args[0].Float()))
+	localPlayer.HandleMovement(players, gameState.Map, float32(args[0].Float()))
 
 	var uint8Array = js.Global().Get("Uint8Array")
 	p := localPlayer
@@ -60,6 +60,27 @@ func applyInput(this js.Value, args []js.Value) interface{} {
 	dst := uint8Array.New(len(buf))
 	js.CopyBytesToJS(dst, buf)
 	return dst
+}
+
+func checkProjectileCollision(this js.Value, args []js.Value) interface{} {
+	posX := float32(args[0].Float())
+	posY := float32(args[1].Float())
+
+	projectile := &model.Projectile{
+		Position: &model.Point{
+			X: posX,
+			Y: posY,
+		},
+		Cleanup: false,
+	}
+
+	for _, p := range players {
+		if projectile.IsCollidingWithPlayer(p) {
+			return js.ValueOf(true)
+		}
+	}
+
+	return js.ValueOf(false)
 }
 
 func getPlayerState(this js.Value, args []js.Value) interface{} {
@@ -166,27 +187,7 @@ func removePlayer(this js.Value, args []js.Value) interface{} {
 	return js.ValueOf(nil)
 }
 
-func getMap(some js.Value, i []js.Value) interface{} {
-	var uint8Array = js.Global().Get("Uint8Array")
-
-	src := make([]byte, 0)
-	x := make([]byte, 4)
-	y := make([]byte, 4)
-
-	for _, point := range gameState.Map.Collider.Points {
-		binary.LittleEndian.PutUint32(x[:], math.Float32bits(point.X))
-		binary.LittleEndian.PutUint32(y[:], math.Float32bits(point.Y))
-		src = append(src, x...)
-		src = append(src, y...)
-	}
-
-	buf := uint8Array.New(len(src))
-	js.CopyBytesToJS(buf, src)
-	return buf
-}
-
 func registerCallbacks() {
-	js.Global().Set("getMap", js.FuncOf(getMap))
 	js.Global().Set("setInput", js.FuncOf(setInput))
 	js.Global().Set("applyInput", js.FuncOf(applyInput))
 	js.Global().Set("createLocalPlayer", js.FuncOf(createLocalPlayer))
@@ -195,6 +196,7 @@ func registerCallbacks() {
 	js.Global().Set("removePlayer", js.FuncOf(removePlayer))
 	js.Global().Set("updateNetworkPlayer", js.FuncOf(updateNetworkPlayer))
 	js.Global().Set("getPlayerState", js.FuncOf(getPlayerState))
+	js.Global().Set("checkProjectileCollision", js.FuncOf(checkProjectileCollision))
 }
 
 var proto protocol.BinaryProtocol

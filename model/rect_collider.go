@@ -12,6 +12,7 @@ type Rect struct {
 	D *Point
 }
 
+// Polygon ...
 type Polygon struct {
 	Points []*Point
 }
