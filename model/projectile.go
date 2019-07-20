@@ -28,6 +28,9 @@ func (b *Projectile) IsCollidingWithPlayer(player *Player) bool {
 // IsCollidingWithEnvironment ...
 func (b *Projectile) IsCollidingWithEnvironment(m *Map) bool {
 	for _, collider := range m.Collider {
+		if !collider.Projectile { // projectiles should fly accross this collider
+			continue
+		}
 		if b.Position.IsInPolygon(collider.Points) {
 			return true
 		}

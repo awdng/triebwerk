@@ -81,7 +81,6 @@ func checkProjectileCollision(this js.Value, args []js.Value) interface{} {
 	}
 
 	if projectile.IsCollidingWithEnvironment(gameState.Map) {
-		println("env hit on client")
 		return js.ValueOf(true)
 	}
 

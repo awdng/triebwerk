@@ -1,6 +1,9 @@
 TODO:
   ☐ fix client removal
-  ☐ collide with full polygon first, then check front/back
+  ✔ collide with full polygon first, then check front/back @done(19-07-20 18:23)
+  ☐ add collider height to shoot across
+  ☐ check if spawnpoint is occupied
+  ☐ add remaining spawnpoints
 
 
 Archive:

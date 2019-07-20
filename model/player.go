@@ -123,13 +123,13 @@ func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 	//check collision of this player against the environment
 	if !r.CollisionFront && !r.CollisionBack { // only if not already colliding with player
 		for _, collider := range m.Collider {
-			if r.collisionPolygon(collider) { // simple check if polygons intersect
+			if r.collisionPolygon(collider.getPolygon()) { // simple check if polygons intersect
 				// check if collision occured front or back
-				r.collisionFront(collider)
+				r.collisionFront(collider.getPolygon())
 				if r.CollisionFront {
 					break
 				}
-				r.collisionBack(collider)
+				r.collisionBack(collider.getPolygon())
 				if r.CollisionBack {
 					break
 				}
