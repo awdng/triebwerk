@@ -1,6 +1,8 @@
 package model
 
-import "math"
+import (
+	"math"
+)
 
 // Point ...
 type Point struct {
@@ -18,6 +20,14 @@ func (p *Point) DirectionTo(v *Point) *Point {
 	dir.Y = p.Y - v.Y
 	normalize(dir)
 	return dir
+}
+
+// WithinDistanceOf radius to another Point
+func (p *Point) WithinDistanceOf(radius float32, v *Point) bool {
+	if math.Pow(float64(v.X-p.X), 2)+math.Pow(float64(v.Y-p.Y), 2) < math.Pow(float64(radius), 2) {
+		return true
+	}
+	return false
 }
 
 // IsInPolygon adapted from http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html

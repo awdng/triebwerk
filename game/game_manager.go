@@ -28,8 +28,9 @@ func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game
 
 // RegisterPlayer registers a networked Player
 func (g *Game) RegisterPlayer(conn model.Connection) {
+	players := g.state.GetPlayers()
 	pID := g.state.GetNewPlayerID()
-	spawn := g.state.Map.GetRandomSpawn()
+	spawn := g.state.Map.GetRandomSpawn(players)
 	player := model.NewPlayer(pID, spawn.X, spawn.Y, conn)
 	g.networkManager.Register(player, g.state)
 	g.state.AddPlayer(player)

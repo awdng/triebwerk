@@ -74,10 +74,10 @@ func (p *Player) Update(players []*Player, game *GameState, dt float32) {
 func (p *Player) HandleRespawn(game *GameState) {
 	m := game.Map
 	if !p.IsAlive() && p.respawnCountdown > respawnTime {
+		spawn := m.GetRandomSpawn(game.GetPlayers())
 		p.Health = 100
 		p.respawnCountdown = 0
 
-		spawn := m.GetRandomSpawn()
 		p.Collider.ChangePosition(spawn.X, spawn.Y)
 		p.Collider.Rotation = 0
 		p.Collider.TurretRotation = 0

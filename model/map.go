@@ -995,7 +995,18 @@ func NewMap() *Map {
 }
 
 // GetRandomSpawn Point
-func (m *Map) GetRandomSpawn() *Point {
+func (m *Map) GetRandomSpawn(players []*Player) *Point {
 	rand.Seed(time.Now().Unix())
-	return m.Spawns[rand.Intn(len(m.Spawns))]
+	index := rand.Intn(len(m.Spawns))
+	spawn := m.Spawns[index]
+	occupied := false
+	for _, p := range players {
+		if p.IsAlive() && spawn.WithinDistanceOf(4, p.Collider.Pivot) {
+			occupied = true
+		}
+	}
+	if occupied { // try again
+		return m.GetRandomSpawn(players)
+	}
+	return spawn
 }
