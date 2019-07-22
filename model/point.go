@@ -30,13 +30,11 @@ func (p *Point) WithinDistanceOf(radius float32, v *Point) bool {
 	return false
 }
 
-// IsInPolygon adapted from http://www.ecse.rpi.edu/Homepages/wrf/Research/Short_Notes/pnpoly.html
+// IsInPolygon adapted from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
 func (p *Point) IsInPolygon(polygon []*Point) bool {
-	// add first element as last point again
-	polygon = append(polygon, polygon[0])
 	inside := false
-	j := 0
-	for i := 1; i < len(polygon); i++ {
+	nvert := len(polygon)
+	for i, j := 0, nvert-1; i < nvert; i++ {
 		if (polygon[i].Y > p.Y) != (polygon[j].Y > p.Y) && p.X < (polygon[j].X-polygon[i].X)*(p.Y-polygon[i].Y)/(polygon[j].Y-polygon[i].Y)+polygon[i].X {
 			inside = !inside
 		}

@@ -1,9 +1,16 @@
 TODO:
   ☐ fix client removal
+  ☐ add proper match start and end
+  ☐ add player registration
+  ☐ add google firebase integration
+  ☐ firebase highscores
+  ☐ send heartbeat to firebase
+  ☐ match identifier
+  ☐ integrate influxDB monitoring
   ✔ collide with full polygon first, then check front/back @done(19-07-20 18:23)
-  ☐ add collider height to shoot across
-  ☐ check if spawnpoint is occupied
-  ☐ add remaining spawnpoints
+  ✔ add collider height to shoot across @done(19-07-20 20:23)
+  ✔ check if spawnpoint is occupied @done(19-07-20 20:23)
+  ✔ add remaining spawnpoints @done(19-07-20 20:23)
 
 
 Archive:
