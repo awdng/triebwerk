@@ -9,6 +9,10 @@ import (
 
 const tickrate = 30
 
+var numMeasurements int64
+var totalMeasurement int64
+var avgTickTime float64
+
 // Game represents the game state
 type Game struct {
 	tickStart      time.Time
@@ -90,10 +94,6 @@ func (g *Game) gameLoop() {
 		g.tickStart = time.Now()
 		players := g.state.GetPlayers()
 
-		if len(players) == 0 {
-			continue
-		}
-
 		// apply latest client inputs
 		for _, p := range players {
 			p.Update(players, g.state, timestep)
@@ -102,5 +102,10 @@ func (g *Game) gameLoop() {
 
 		// broadcast game state to clients
 		g.networkManager.BroadcastGameState(g.state)
+
+		// measure average tick time
+		numMeasurements++
+		totalMeasurement += time.Now().UTC().UnixNano() - g.tickStart.UTC().UnixNano()
+		avgTickTime = float64(totalMeasurement/numMeasurements) / 1000 / 1000
 	}
 }

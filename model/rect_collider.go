@@ -202,6 +202,16 @@ func (r *RectCollider) doPolygonsIntersect(a Polygon, b Polygon) bool {
 	return doPolygonsIntersect(a, b)
 }
 
+// TODO: benchmark against this version (no edge overlap)
+// func (r *RectCollider) doPolygonsIntersect(a Polygon, b Polygon) bool {
+// 	for _, p := range a.Points {
+// 		if p.IsInPolygon(b.Points) {
+// 			return true
+// 		}
+// 	}
+// 	return false
+// }
+
 func doPolygonsIntersect(a Polygon, b Polygon) bool {
 	for _, polygon := range [2]Polygon{a, b} {
 		for i1 := 0; i1 < len(polygon.Points); i1++ {
