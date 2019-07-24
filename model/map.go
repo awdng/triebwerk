@@ -1003,6 +1003,7 @@ func (m *Map) GetRandomSpawn(players []*Player) *Point {
 	for _, p := range players {
 		if p.IsAlive() && spawn.WithinDistanceOf(4, p.Collider.Pivot) {
 			occupied = true
+			break
 		}
 	}
 	if occupied { // try again
