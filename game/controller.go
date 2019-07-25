@@ -13,17 +13,17 @@ var numMeasurements int64
 var totalMeasurement int64
 var avgTickTime float64
 
-// Game represents the game state
-type Game struct {
+// Controller ...
+type Controller struct {
 	tickStart      time.Time
 	networkManager *NetworkManager
 	playerManager  *PlayerManager
 	state          *model.GameState
 }
 
-// NewGame creates a game instance
-func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game {
-	return &Game{
+// NewController creates a game instance
+func NewController(networkManager *NetworkManager, playerManager *PlayerManager) *Controller {
+	return &Controller{
 		networkManager: networkManager,
 		playerManager:  playerManager,
 		state:          model.NewGameState(),
@@ -31,18 +31,20 @@ func NewGame(networkManager *NetworkManager, playerManager *PlayerManager) *Game
 }
 
 // RegisterPlayer registers a networked Player
-func (g *Game) RegisterPlayer(conn model.Connection) {
+func (g *Controller) RegisterPlayer(conn model.Connection) {
 	players := g.state.GetPlayers()
 	pID := g.state.GetNewPlayerID()
 	spawn := g.state.Map.GetRandomSpawn(players)
 	player := model.NewPlayer(pID, spawn.X, spawn.Y, conn)
 	g.networkManager.Register(player, g.state)
 	g.state.AddPlayer(player)
+	g.Start()
 	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.GetPlayerCount())
+
 }
 
 // UnregisterPlayer of a networked game
-func (g *Game) UnregisterPlayer(conn model.Connection) {
+func (g *Controller) UnregisterPlayer(conn model.Connection) {
 	players := g.state.GetPlayers()
 	for _, p := range players {
 		if p.Client.Connection == conn {
@@ -53,19 +55,25 @@ func (g *Game) UnregisterPlayer(conn model.Connection) {
 	}
 }
 
-// Start the gameserver loop
-func (g *Game) Start() error {
+// Init the gameserver
+func (g *Controller) Init() error {
 	// goroutine constantly reads player input
 	go g.processInputs()
-
-	// Execute game loop
-	go g.gameLoop()
 
 	// Start networking
 	return g.networkManager.Start()
 }
 
-func (g *Game) processInputs() {
+// Start the gameserver loop
+func (g *Controller) Start() {
+	if g.state.ReadyToStart() {
+		g.state.Start()
+		// Execute game loop
+		go g.gameLoop()
+	}
+}
+
+func (g *Controller) processInputs() {
 	// continously read all player inputs at 1000Hz
 	ticker := time.NewTicker(1 * time.Millisecond)
 	for range ticker.C {
@@ -86,26 +94,46 @@ func (g *Game) processInputs() {
 	}
 }
 
-func (g *Game) gameLoop() {
+func (g *Controller) gameLoop() {
+	gameEnded := make(chan bool)
 	interval := time.Duration(int(1000/tickrate)) * time.Millisecond
-	ticker := time.NewTicker(interval)
 	timestep := float32(interval/time.Millisecond) / 1000
-	for range ticker.C {
-		g.tickStart = time.Now()
-		players := g.state.GetPlayers()
 
-		// apply latest client inputs
-		for _, p := range players {
-			p.Update(players, g.state, timestep)
-			p.HandleRespawn(g.state)
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+
+	log.Printf("GameManager: Game has started")
+	for {
+		select {
+		case <-ticker.C:
+			g.tickStart = time.Now()
+			players := g.state.GetPlayers()
+
+			// apply latest client inputs
+			for _, p := range players {
+				p.Update(players, g.state, timestep)
+				p.HandleRespawn(g.state)
+			}
+
+			// broadcast game state to clients
+			g.networkManager.BroadcastGameState(g.state)
+
+			if g.state.HasEnded() {
+				close(gameEnded)
+			}
+
+			// measure average tick time
+			numMeasurements++
+			totalMeasurement += time.Now().UTC().UnixNano() - g.tickStart.UTC().UnixNano()
+			avgTickTime = float64(totalMeasurement/numMeasurements) / 1000 / 1000
+		case _, ok := <-gameEnded:
+			if !ok {
+				g.state.End()
+				log.Printf("GameManager: Game has ended")
+				time.Sleep(10 * time.Second)
+				g.Start()
+				return
+			}
 		}
-
-		// broadcast game state to clients
-		g.networkManager.BroadcastGameState(g.state)
-
-		// measure average tick time
-		numMeasurements++
-		totalMeasurement += time.Now().UTC().UnixNano() - g.tickStart.UTC().UnixNano()
-		avgTickTime = float64(totalMeasurement/numMeasurements) / 1000 / 1000
 	}
 }

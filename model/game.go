@@ -6,12 +6,16 @@ import (
 	"time"
 )
 
+const gameLength = 1
+
 // GameState ...
 type GameState struct {
-	StartTime   time.Time
-	PlayerID    int64
-	PlayerCount int
-	Players     map[int]*Player
+	startTime   time.Time
+	length      time.Duration
+	inProgress  bool
+	playerID    int64
+	playerCount int
+	players     map[int]*Player
 	Map         *Map
 	mutex       *sync.RWMutex
 }
@@ -19,55 +23,99 @@ type GameState struct {
 // NewGameState ...
 func NewGameState() *GameState {
 	return &GameState{
-		StartTime: time.Now(),
-		Players:   make(map[int]*Player),
-		Map:       NewMap(),
-		mutex:     &sync.RWMutex{},
+		inProgress: false,
+		length:     time.Minute * gameLength,
+		players:    make(map[int]*Player),
+		Map:        NewMap(),
+		mutex:      &sync.RWMutex{},
 	}
+}
+
+// ReadyToStart ...
+func (g *GameState) ReadyToStart() bool {
+	return g.GetPlayerCount() >= 2 && !g.InProgress()
+}
+
+// Start ...
+func (g *GameState) Start() {
+	players := g.GetPlayers()
+	// randomize player spawns
+	for _, p := range players {
+		p.Health = 100
+		spawn := g.Map.GetRandomSpawn(players)
+		p.Collider.ChangePosition(spawn.X, spawn.Y)
+	}
+
+	g.startTime = time.Now()
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+	g.inProgress = true
+}
+
+// End ...
+func (g *GameState) End() {
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+	g.inProgress = false
+}
+
+// InProgress ...
+func (g *GameState) InProgress() bool {
+	g.mutex.RLock()
+	defer g.mutex.RUnlock()
+	return g.inProgress
+}
+
+// HasEnded ...
+func (g *GameState) HasEnded() bool {
+	return time.Now().Sub(g.startTime) >= g.length
 }
 
 // GameTime returns the current game time since start in milliseconds
 func (g *GameState) GameTime() uint32 {
-	return uint32(time.Now().Sub(g.StartTime) / time.Millisecond)
+	return uint32(time.Now().Sub(g.startTime) / time.Millisecond)
 }
 
 // GetPlayers returns the PlayerList
 func (g *GameState) GetPlayers() []*Player {
 	players := make([]*Player, 0)
 	g.mutex.RLock()
-	for _, p := range g.Players {
+	defer g.mutex.RUnlock()
+
+	for _, p := range g.players {
 		players = append(players, p)
 	}
-	g.mutex.RUnlock()
-
 	return players
 }
 
 // GetPlayerCount ...
 func (g *GameState) GetPlayerCount() int {
 	g.mutex.RLock()
-	c := g.PlayerCount
-	g.mutex.RUnlock()
-	return c
+	defer g.mutex.RUnlock()
+	return g.playerCount
 }
 
 // GetNewPlayerID ...
 func (g *GameState) GetNewPlayerID() int {
-	return int(atomic.AddInt64(&g.PlayerID, 1))
+	return int(atomic.AddInt64(&g.playerID, 1))
 }
 
 // AddPlayer to the game
-func (g *GameState) AddPlayer(player *Player) {
+func (g *GameState) AddPlayer(player *Player) int {
 	g.mutex.Lock()
-	g.Players[player.ID] = player
-	g.PlayerCount++
-	g.mutex.Unlock()
+	defer g.mutex.Unlock()
+
+	g.players[player.ID] = player
+	g.playerCount++
+	return g.playerCount
 }
 
 // RemovePlayer from the game
-func (g *GameState) RemovePlayer(player *Player) {
+func (g *GameState) RemovePlayer(player *Player) int {
 	g.mutex.Lock()
-	delete(g.Players, player.ID)
-	g.PlayerCount--
-	g.mutex.Unlock()
+	defer g.mutex.Unlock()
+
+	delete(g.players, player.ID)
+	g.playerCount--
+	return g.playerCount
 }

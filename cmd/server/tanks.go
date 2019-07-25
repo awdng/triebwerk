@@ -181,6 +181,11 @@ func updateNetworkPlayer(this js.Value, args []js.Value) interface{} {
 
 func removePlayer(this js.Value, args []js.Value) interface{} {
 	id := args[0].Int()
+	if localPlayer != nil && localPlayer.ID == id {
+		localPlayer = nil
+		return js.ValueOf(nil)
+	}
+
 	newPlayers := make([]*model.Player, 0)
 	for _, p := range players {
 		if p.ID != id {

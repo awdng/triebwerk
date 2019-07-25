@@ -14,10 +14,10 @@ func main() {
 	playerManager := game.NewPlayerManager()
 	transport := websocket.NewTransport()
 	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
-	gameManager := game.NewGame(networkManager, playerManager)
+	gameManager := game.NewController(networkManager, playerManager)
 	transport.RegisterNewConnHandler(gameManager.RegisterPlayer)
 	transport.UnregisterConnHandler(gameManager.UnregisterPlayer)
 
 	// start game server
-	log.Fatal(gameManager.Start())
+	log.Fatal(gameManager.Init())
 }
