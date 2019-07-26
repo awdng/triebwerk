@@ -1,9 +1,12 @@
 package game
 
 import (
+	"context"
 	"log"
 	"time"
 
+	"cloud.google.com/go/firestore"
+	firebase "firebase.google.com/go"
 	"github.com/awdng/triebwerk/model"
 )
 
@@ -13,20 +16,39 @@ var numMeasurements int64
 var totalMeasurement int64
 var avgTickTime float64
 
+type serverState struct {
+	Connect string `firestore:"connect"`
+}
+
 // Controller ...
 type Controller struct {
 	tickStart      time.Time
 	networkManager *NetworkManager
 	playerManager  *PlayerManager
 	state          *model.GameState
+	database       *firestore.Client
 }
 
 // NewController creates a game instance
 func NewController(networkManager *NetworkManager, playerManager *PlayerManager) *Controller {
+	ctx := context.Background()
+	config := &firebase.Config{}
+
+	app, err := firebase.NewApp(ctx, config)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client, err := app.Firestore(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	return &Controller{
 		networkManager: networkManager,
 		playerManager:  playerManager,
 		state:          model.NewGameState(),
+		database:       client,
 	}
 }
 
@@ -60,13 +82,49 @@ func (g *Controller) Init() error {
 	// goroutine constantly reads player input
 	go g.processInputs()
 
+	// init HeartBeat
+	go g.HeartBeat()
+
 	// Start networking
 	return g.networkManager.Start()
+}
+
+// HeartBeat ...
+func (g *Controller) HeartBeat() {
+	// Wait for Network to become ready
+	time.Sleep(time.Second)
+
+	ctx := context.Background()
+	server, _, err := g.database.Collection("Server").Add(ctx, g.buildServerState())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ticker := time.NewTicker(time.Second * 5)
+	for range ticker.C {
+		_, err := server.Set(ctx, g.buildServerState())
+		if err != nil {
+			log.Printf(err.Error())
+		}
+	}
+}
+
+func (g *Controller) buildServerState() serverState {
+	serverState := serverState{
+		Connect: g.networkManager.GetAddress(),
+	}
+	return serverState
 }
 
 // Start the gameserver loop
 func (g *Controller) Start() {
 	if g.state.ReadyToStart() {
+		ctx := context.Background()
+		_, _, err := g.database.Collection("Match").Add(ctx, g.state.GetAsMap())
+		if err != nil {
+			log.Fatal(err)
+		}
+
 		g.state.Start()
 		// Execute game loop
 		go g.gameLoop()

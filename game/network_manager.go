@@ -42,6 +42,7 @@ type Protocol interface {
 // Transport represents the network context
 type Transport interface {
 	Init()
+	GetAddress() string
 	Run() error
 	RegisterNewConnHandler(register func(conn model.Connection))
 	UnregisterConnHandler(unregister func(conn model.Connection))
@@ -51,6 +52,8 @@ type Transport interface {
 // NetworkManager maintains the set of active clients and broadcasts messages to the
 // clients.
 type NetworkManager struct {
+	Ready bool
+
 	// network context eg. websockets
 	transport Transport
 
@@ -73,6 +76,7 @@ type NetworkManager struct {
 // NewNetworkManager ...
 func NewNetworkManager(transport Transport, protocol Protocol) *NetworkManager {
 	return &NetworkManager{
+		Ready:      false,
 		transport:  transport,
 		protocol:   protocol,
 		broadcast:  make(chan []byte),
@@ -80,6 +84,11 @@ func NewNetworkManager(transport Transport, protocol Protocol) *NetworkManager {
 		unregister: make(chan *model.Client),
 		clients:    make(map[*model.Client]bool),
 	}
+}
+
+// GetAddress ...
+func (n *NetworkManager) GetAddress() string {
+	return n.transport.GetAddress()
 }
 
 // Start handling network connections

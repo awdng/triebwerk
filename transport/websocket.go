@@ -3,7 +3,10 @@ package websocket
 import (
 	"fmt"
 	"log"
+	"net"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
@@ -15,11 +18,14 @@ type Transport struct {
 	upgrader   websocket.Upgrader
 	register   func(conn model.Connection)
 	unregister func(conn model.Connection)
+	port       int
+	address    string
 }
 
 // NewTransport creates the websocket context
-func NewTransport() *Transport {
+func NewTransport(address string) *Transport {
 	return &Transport{
+		address: address,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -28,6 +34,11 @@ func NewTransport() *Transport {
 			},
 		},
 	}
+}
+
+// GetAddress ...
+func (t *Transport) GetAddress() string {
+	return strings.Join([]string{t.address, strconv.Itoa(t.port)}, ":")
 }
 
 // RegisterNewConnHandler is a callback for new connections
@@ -60,8 +71,14 @@ func (t *Transport) Init() {
 
 // Run ...
 func (t *Transport) Run() error {
-	log.Printf("Starting Triebwerk Websocket Server on Port %s...", "8080")
-	return http.ListenAndServe(":8080", nil)
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		panic(err)
+	}
+	t.port = listener.Addr().(*net.TCPAddr).Port
+
+	log.Printf("Starting Triebwerk Websocket Server on Port %d...", t.port)
+	return http.Serve(listener, nil)
 }
 
 // Connection represents a websocket connection
