@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
 
+	firebase "firebase.google.com/go"
 	"github.com/awdng/triebwerk"
 	"github.com/awdng/triebwerk/game"
 	"github.com/awdng/triebwerk/protocol"
@@ -17,12 +19,30 @@ func main() {
 		log.Fatal(err)
 	}
 
+	ctx := context.Background()
+	firebaseConfig := &firebase.Config{}
+
+	app, err := firebase.NewApp(ctx, firebaseConfig)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	client, err := app.Firestore(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	firebase := &triebwerk.Firebase{
+		App:   app,
+		Store: client,
+	}
+
 	log.Printf("Loading Triebwerk ...")
 
-	playerManager := game.NewPlayerManager()
+	playerManager := game.NewPlayerManager(firebase)
 	transport := websocket.NewTransport(config.PublicIP)
 	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
-	controller := game.NewController(networkManager, playerManager)
+	controller := game.NewController(networkManager, playerManager, firebase)
 	transport.RegisterNewConnHandler(controller.RegisterPlayer)
 	transport.UnregisterConnHandler(controller.UnregisterPlayer)
 

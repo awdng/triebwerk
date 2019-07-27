@@ -25,6 +25,7 @@ func NewBinaryProtocol() BinaryProtocol {
 	protocol.encodeHandlers[2] = encodePlayerRegister
 	protocol.encodeHandlers[5] = encodePlayerTime
 
+	protocol.decodeHandlers[0] = decodePlayerAuth
 	protocol.decodeHandlers[1] = decodePlayerInput
 	protocol.decodeHandlers[5] = decodePlayerTime
 
@@ -149,4 +150,8 @@ func decodePlayerInput(data []byte, message *model.NetworkMessage) {
 
 func decodePlayerTime(data []byte, message *model.NetworkMessage) {
 	message.Body = binary.BigEndian.Uint32(data[2:])
+}
+
+func decodePlayerAuth(data []byte, message *model.NetworkMessage) {
+	message.Body = string(data[2:])
 }

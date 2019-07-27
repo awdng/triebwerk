@@ -5,8 +5,7 @@ import (
 	"log"
 	"time"
 
-	"cloud.google.com/go/firestore"
-	firebase "firebase.google.com/go"
+	"github.com/awdng/triebwerk"
 	"github.com/awdng/triebwerk/model"
 )
 
@@ -17,7 +16,10 @@ var totalMeasurement int64
 var avgTickTime float64
 
 type serverState struct {
-	Connect string `firestore:"connect"`
+	Connect   string         `firestore:"connect"`
+	Scores    map[string]int `firestore:"scores"`
+	GameTime  int            `firestore:"gametime"`
+	UpdatedAt int64          `firestore:"updated_at"`
 }
 
 // Controller ...
@@ -26,29 +28,16 @@ type Controller struct {
 	networkManager *NetworkManager
 	playerManager  *PlayerManager
 	state          *model.GameState
-	database       *firestore.Client
+	firebase       *triebwerk.Firebase
 }
 
 // NewController creates a game instance
-func NewController(networkManager *NetworkManager, playerManager *PlayerManager) *Controller {
-	ctx := context.Background()
-	config := &firebase.Config{}
-
-	app, err := firebase.NewApp(ctx, config)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	client, err := app.Firestore(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+func NewController(networkManager *NetworkManager, playerManager *PlayerManager, firebase *triebwerk.Firebase) *Controller {
 	return &Controller{
 		networkManager: networkManager,
 		playerManager:  playerManager,
 		state:          model.NewGameState(),
-		database:       client,
+		firebase:       firebase,
 	}
 }
 
@@ -62,7 +51,6 @@ func (g *Controller) RegisterPlayer(conn model.Connection) {
 	g.state.AddPlayer(player)
 	g.Start()
 	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.GetPlayerCount())
-
 }
 
 // UnregisterPlayer of a networked game
@@ -95,7 +83,7 @@ func (g *Controller) HeartBeat() {
 	time.Sleep(time.Second)
 
 	ctx := context.Background()
-	server, _, err := g.database.Collection("Server").Add(ctx, g.buildServerState())
+	server, _, err := g.firebase.Store.Collection("Server").Add(ctx, g.buildServerState())
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -110,8 +98,16 @@ func (g *Controller) HeartBeat() {
 }
 
 func (g *Controller) buildServerState() serverState {
+	players := g.state.GetPlayers()
+	scores := map[string]int{}
+	for _, p := range players {
+		scores[p.GlobalID] = p.Score
+	}
 	serverState := serverState{
-		Connect: g.networkManager.GetAddress(),
+		Connect:   g.networkManager.GetAddress(),
+		UpdatedAt: time.Now().UTC().Unix(),
+		GameTime:  int(g.state.GameTime()),
+		Scores:    scores,
 	}
 	return serverState
 }
@@ -119,11 +115,11 @@ func (g *Controller) buildServerState() serverState {
 // Start the gameserver loop
 func (g *Controller) Start() {
 	if g.state.ReadyToStart() {
-		ctx := context.Background()
-		_, _, err := g.database.Collection("Match").Add(ctx, g.state.GetAsMap())
-		if err != nil {
-			log.Fatal(err)
-		}
+		// ctx := context.Background()
+		// _, _, err := g.database.Collection("Match").Add(ctx, g.state.GetAsMap())
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
 
 		g.state.Start()
 		// Execute game loop
@@ -140,6 +136,15 @@ func (g *Controller) processInputs() {
 			select {
 			case message := <-p.Client.NetworkIn:
 				switch messageType := message.MessageType; messageType {
+				case 0:
+					token := message.Body.(string)
+					err := g.playerManager.Authorize(p, token)
+					if err != nil {
+						log.Printf("GameManager: Player %d could not be verified, forcing disconnect: %s", p.ID, err)
+						g.networkManager.ForceDisconnect(p)
+						continue
+					}
+					log.Printf("GameManager: Player %d authorized successfully as GlobalID %s", p.ID, p.GlobalID)
 				case 1:
 					p.Control = message.Body.(model.Controls)
 				case 5:

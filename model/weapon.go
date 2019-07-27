@@ -33,6 +33,7 @@ func (w *Weapon) Update(players []*Player, m *Map, dt float32) {
 				enemy.Health -= 25
 				if enemy.Health <= 0 {
 					enemy.Health = 0
+					w.owner.Score++
 				}
 				b.Cleanup = true
 				break

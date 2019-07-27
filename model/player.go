@@ -35,7 +35,10 @@ type Controls struct {
 // Player ...
 type Player struct {
 	ID               int
+	GlobalID         string
+	AuthToken        string
 	Health           int
+	Score            int
 	respawnCountdown float32
 	Weapons          []*Weapon
 	Control          Controls

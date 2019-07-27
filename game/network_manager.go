@@ -18,7 +18,7 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 
 	// Maximum message size allowed from peer.
-	maxMessageSize = 512
+	maxMessageSize = 1024
 )
 
 // MessageType ...
@@ -141,6 +141,13 @@ func (n *NetworkManager) Register(player *model.Player, state *model.GameState) 
 	n.Send(player.Client, buf)
 }
 
+// ForceDisconnect of Player
+func (n *NetworkManager) ForceDisconnect(player *model.Player) {
+	client := player.Client
+	client.Connection.Close(writeWait, false)
+	n.unregister <- client
+}
+
 // SendTime back to player
 func (n *NetworkManager) SendTime(player *model.Player, state *model.GameState, message *model.NetworkMessage) {
 	buf := make([]byte, 0)
@@ -220,7 +227,6 @@ func (n *NetworkManager) reader(client *model.Client) {
 			log.Printf("Reader: Closing connection of Client %s: %s", client.Connection.Identifier(), err)
 			break
 		}
-
 		client.NetworkIn <- n.protocol.Decode(message)
 	}
 }

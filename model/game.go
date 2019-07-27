@@ -1,7 +1,6 @@
 package model
 
 import (
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -32,18 +31,6 @@ func NewGameState() *GameState {
 	}
 }
 
-// GetAsMap ...
-func (g *GameState) GetAsMap() map[string]interface{} {
-	out := map[string]interface{}{}
-	out["scores"] = map[string]int{}
-	players := g.GetPlayers()
-	for _, p := range players {
-		out["scores"].(map[string]int)[strconv.Itoa(p.ID)] = 22
-	}
-	out["updated_at"] = time.Now()
-	return out
-}
-
 // ReadyToStart ...
 func (g *GameState) ReadyToStart() bool {
 	return g.GetPlayerCount() >= 1 && !g.InProgress()
@@ -55,6 +42,7 @@ func (g *GameState) Start() {
 	// randomize player spawns
 	for _, p := range players {
 		p.Health = 100
+		p.Score = 0
 		spawn := g.Map.GetRandomSpawn(players)
 		p.Collider.ChangePosition(spawn.X, spawn.Y)
 	}
