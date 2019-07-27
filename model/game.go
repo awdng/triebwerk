@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-const gameLength = 1
+const gameLength = 5
 
 // GameState ...
 type GameState struct {

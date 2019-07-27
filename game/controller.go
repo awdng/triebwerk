@@ -115,12 +115,6 @@ func (g *Controller) buildServerState() serverState {
 // Start the gameserver loop
 func (g *Controller) Start() {
 	if g.state.ReadyToStart() {
-		// ctx := context.Background()
-		// _, _, err := g.database.Collection("Match").Add(ctx, g.state.GetAsMap())
-		// if err != nil {
-		// 	log.Fatal(err)
-		// }
-
 		g.state.Start()
 		// Execute game loop
 		go g.gameLoop()
@@ -193,6 +187,11 @@ func (g *Controller) gameLoop() {
 			if !ok {
 				g.state.End()
 				log.Printf("GameManager: Game has ended")
+				ctx := context.Background()
+				_, _, err := g.firebase.Store.Collection("Match").Add(ctx, g.buildServerState())
+				if err != nil {
+					log.Fatal(err)
+				}
 				time.Sleep(10 * time.Second)
 				g.Start()
 				return
