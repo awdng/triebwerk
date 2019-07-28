@@ -134,7 +134,7 @@ func (g *Controller) processInputs() {
 					token := message.Body.(string)
 					err := g.playerManager.Authorize(p, token)
 					if err != nil {
-						log.Printf("GameManager: Player %d could not be verified, forcing disconnect: %s", p.ID, err)
+						log.Printf("GameManager: Player %d (%s) could not be verified, forcing disconnect: %s", p.ID, p.GlobalID, err)
 						g.networkManager.ForceDisconnect(p)
 						continue
 					}

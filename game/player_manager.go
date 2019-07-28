@@ -32,6 +32,7 @@ func (p *PlayerManager) Authorize(player *model.Player, token string) error {
 	if err != nil {
 		return err
 	}
+	player.GlobalID = checkedToken.UID
 
 	// user did not verify email
 	if emailVerified, ok := checkedToken.Claims["email_verified"]; ok {
@@ -39,7 +40,6 @@ func (p *PlayerManager) Authorize(player *model.Player, token string) error {
 			return errors.New("User email not verified")
 		}
 	}
-	player.GlobalID = checkedToken.UID
 
 	return nil
 }
