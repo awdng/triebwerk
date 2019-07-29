@@ -77,7 +77,7 @@ func (t *Transport) Run() error {
 	}
 	t.port = listener.Addr().(*net.TCPAddr).Port
 
-	log.Printf("Starting Triebwerk Websocket Server on Port %d...", t.port)
+	log.Printf("Starting Triebwerk Websocket Server on %s...", t.GetAddress())
 	return http.Serve(listener, nil)
 }
 

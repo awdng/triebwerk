@@ -1,5 +1,5 @@
 # Builder Image
-FROM golang:1.12.5-alpine3.9 as builder
+FROM golang:1.13beta1-alpine3.10 as builder
 
 RUN apk update \
     && apk upgrade \
@@ -17,12 +17,10 @@ RUN chmod +x docker/docker-entrypoint.sh \
     && make build-static
 
 # Run image
-
-FROM alpine:3.9
+FROM alpine:3.10
 
 WORKDIR /
 
-COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /triebwerk/docker/docker-entrypoint.sh .
 COPY --from=builder /triebwerk/triebwerk .
 

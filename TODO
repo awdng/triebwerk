@@ -1,11 +1,11 @@
 TODO:
-  ☐ fix client removal
-  ☐ add proper match start and end
-  ☐ add player registration
-  ☐ add google firebase integration
-  ☐ firebase highscores
-  ☐ send heartbeat to firebase
-  ☐ match identifier
+  ✔ fix client removal @done(19-07-29 07:47)
+  ✔ add proper match start and end @done(19-07-29 07:47)
+  ✔ add player registration @done(19-07-29 07:47)
+  ✔ add google firebase integration @done(19-07-29 07:47)
+  ✔ firebase highscores @done(19-07-29 07:47)
+  ✔ send heartbeat to firebase @done(19-07-29 07:47)
+  ✔ match identifier @done(19-07-29 07:47)
   ☐ integrate influxDB monitoring
   ✔ collide with full polygon first, then check front/back @done(19-07-20 18:23)
   ✔ add collider height to shoot across @done(19-07-20 20:23)
