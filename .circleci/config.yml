@@ -21,6 +21,29 @@ jobs:
     steps:
       - checkout
 
-      # specify any bash command here prefixed with `run: `
+      
       - run: go get -v -t -d ./...
-      - run: go test -v ./...
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Build and push Docker image
+          command: |
+            docker build -t toxical/$IMAGE_NAME:$TAG .
+            echo $DOCKER_PWD | docker login -u $DOCKER_LOGIN --password-stdin
+            docker push toxical/$IMAGE_NAME:$TAG
+      - run:
+          name: Deploy app to Digital Ocean Server via Docker
+          command: |
+            ssh -o StrictHostKeyChecking=no root@116.203.187.192 "/bin/bash ./deploy_app.sh toxical/$IMAGE_NAME:$TAG"
+
+workflows:
+  version: 2
+  build-and-deploy:
+    jobs:
+      - build
+      - deploy:
+          requires:
+            - build
+          filters:
+            branches:
+              only: master
