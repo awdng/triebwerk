@@ -24,7 +24,7 @@ jobs:
           name: Setup Env
           command: |
             echo 'export TAG=0.1.${CIRCLE_BUILD_NUM}' >> $BASH_ENV
-            echo 'export IMAGE_NAME=python-circleci-docker' >> $BASH_ENV
+            echo 'export IMAGE_NAME=triebwerk' >> $BASH_ENV
       - run: go get -v -t -d ./...
       - setup_remote_docker:
           docker_layer_caching: true
@@ -37,7 +37,7 @@ jobs:
       - run:
           name: Deploy app to Digital Ocean Server via Docker
           command: |
-            ssh -o StrictHostKeyChecking=no root@116.203.187.192 "/bin/bash ./deploy_app.sh toxical/$IMAGE_NAME:$TAG"
+            ssh -o StrictHostKeyChecking=no root@116.203.187.192 "/bin/bash /root/deploy.sh toxical/$IMAGE_NAME:$TAG"
 
 workflows:
   version: 2
