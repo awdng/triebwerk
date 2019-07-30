@@ -35,7 +35,7 @@ jobs:
             echo $DOCKER_PWD | docker login -u $DOCKER_LOGIN --password-stdin
             docker push toxical/$IMAGE_NAME:$TAG
       - run:
-          name: Deploy app to Digital Ocean Server via Docker
+          name: Deploy game server via Docker
           command: |
             ssh -o StrictHostKeyChecking=no root@116.203.187.192 "/bin/bash ./deploy.sh toxical/$IMAGE_NAME:$TAG"
 
