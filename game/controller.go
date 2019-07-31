@@ -87,6 +87,7 @@ func (g *Controller) HeartBeat() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Printf("GameManager: Server Registered with global ID %s", server.ID)
 
 	ticker := time.NewTicker(time.Second * 5)
 	for range ticker.C {
@@ -122,8 +123,9 @@ func (g *Controller) Start() {
 }
 
 func (g *Controller) processInputs() {
-	// continously read all player inputs at 1000Hz
-	ticker := time.NewTicker(1 * time.Millisecond)
+	// continously read all player inputs
+	ticker := time.NewTicker(16 * time.Millisecond)
+	defer ticker.Stop()
 	for range ticker.C {
 		players := g.state.GetPlayers()
 		for _, p := range players {
@@ -143,7 +145,6 @@ func (g *Controller) processInputs() {
 					p.Control = message.Body.(model.Controls)
 				case 5:
 					g.networkManager.SendTime(p, g.state, &message)
-				default:
 				}
 			default:
 			}
@@ -152,7 +153,7 @@ func (g *Controller) processInputs() {
 }
 
 func (g *Controller) gameLoop() {
-	gameEnded := make(chan bool)
+	ctx := context.Background()
 	interval := time.Duration(int(1000/tickrate)) * time.Millisecond
 	timestep := float32(interval/time.Millisecond) / 1000
 
@@ -160,42 +161,34 @@ func (g *Controller) gameLoop() {
 	defer ticker.Stop()
 
 	log.Printf("GameManager: Game has started")
-	for {
-		select {
-		case <-ticker.C:
-			g.tickStart = time.Now()
-			players := g.state.GetPlayers()
+	for range ticker.C {
+		g.tickStart = time.Now()
+		players := g.state.GetPlayers()
 
-			// apply latest client inputs
-			for _, p := range players {
-				p.Update(players, g.state, timestep)
-				p.HandleRespawn(g.state)
-			}
-
-			// broadcast game state to clients
-			g.networkManager.BroadcastGameState(g.state)
-
-			if g.state.HasEnded() {
-				close(gameEnded)
-			}
-
-			// measure average tick time
-			numMeasurements++
-			totalMeasurement += time.Now().UTC().UnixNano() - g.tickStart.UTC().UnixNano()
-			avgTickTime = float64(totalMeasurement/numMeasurements) / 1000 / 1000
-		case _, ok := <-gameEnded:
-			if !ok {
-				g.state.End()
-				log.Printf("GameManager: Game has ended")
-				ctx := context.Background()
-				_, _, err := g.firebase.Store.Collection("Match").Add(ctx, g.buildServerState())
-				if err != nil {
-					log.Fatal(err)
-				}
-				time.Sleep(10 * time.Second)
-				g.Start()
-				return
-			}
+		// apply latest client inputs
+		for _, p := range players {
+			p.Update(players, g.state, timestep)
+			p.HandleRespawn(g.state)
 		}
+
+		// broadcast game state to clients
+		g.networkManager.BroadcastGameState(g.state)
+
+		if g.state.HasEnded() {
+			g.state.End()
+			log.Printf("GameManager: Game has ended")
+			_, _, err := g.firebase.Store.Collection("Match").Add(ctx, g.buildServerState())
+			if err != nil {
+				log.Fatal(err)
+			}
+			time.Sleep(10 * time.Second)
+			g.Start()
+			return
+		}
+
+		// measure average tick time
+		numMeasurements++
+		totalMeasurement += time.Now().UTC().UnixNano() - g.tickStart.UTC().UnixNano()
+		avgTickTime = float64(totalMeasurement/numMeasurements) / 1000 / 1000
 	}
 }
