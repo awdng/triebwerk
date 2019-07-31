@@ -124,7 +124,7 @@ func (g *Controller) Start() {
 
 func (g *Controller) processInputs() {
 	// continously read all player inputs
-	ticker := time.NewTicker(16 * time.Millisecond)
+	ticker := time.NewTicker(10 * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
 		players := g.state.GetPlayers()
