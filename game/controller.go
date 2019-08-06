@@ -99,16 +99,16 @@ func (g *Controller) HeartBeat() {
 }
 
 func (g *Controller) buildServerState() serverState {
-	players := g.state.GetPlayers()
-	scores := map[string]int{}
-	for _, p := range players {
-		scores[p.GlobalID] = p.Score
-	}
+	// players := g.state.GetPlayers()
+	// scores := map[string]int{}
+	// for _, p := range players {
+	// 	scores[p.GlobalID] = p.Score
+	// }
 	serverState := serverState{
 		Connect:   g.networkManager.GetAddress(),
 		UpdatedAt: time.Now().UTC().Unix(),
 		GameTime:  int(g.state.GameTime()),
-		Scores:    scores,
+		// Scores:    scores,
 	}
 	return serverState
 }
