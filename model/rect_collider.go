@@ -101,21 +101,21 @@ func (r *RectCollider) Rotate(angle float32) {
 	r.rotateRectPoint(angle, r.Turret)
 }
 
-func (r *RectCollider) rotateRectPoint(angle float32, p *Point) {
-	s := float32(math.Sin(float64(angle)))
-	c := float32(math.Cos(float64(angle)))
+func (r *RectCollider) rotateRectPoint(theta float32, p *Point) {
+	sinTheta := float32(math.Sin(float64(theta)))
+	cosTheta := float32(math.Cos(float64(theta)))
 
-	// translate point back to origin:
+	// point to origin
 	p.X -= r.Pivot.X
 	p.Y -= r.Pivot.Y
 
-	// rotate point
-	xnew := p.X*c - p.Y*s
-	ynew := p.X*s + p.Y*c
+	// rotation
+	x := p.X*cosTheta - p.Y*sinTheta
+	y := p.X*sinTheta + p.Y*cosTheta
 
-	// translate point back:
-	p.X = xnew + r.Pivot.X
-	p.Y = ynew + r.Pivot.Y
+	// point back to original position
+	p.X = x + r.Pivot.X
+	p.Y = y + r.Pivot.Y
 }
 
 // ChangePosition of Collider

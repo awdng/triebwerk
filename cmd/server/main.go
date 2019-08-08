@@ -3,6 +3,10 @@ package main
 import (
 	"context"
 	"log"
+	"os"
+	"os/signal"
+	"runtime/pprof"
+	"syscall"
 
 	firebase "firebase.google.com/go"
 	"github.com/awdng/triebwerk"
@@ -13,6 +17,19 @@ import (
 )
 
 func main() {
+	f, _ := os.Create("../goroutine_profile")
+	defer f.Close()
+
+	// pprof.StartCPUProfile(f)
+	// defer func() {
+	// 	log.Println("stop cpu profile")
+	// 	pprof.StopCPUProfile()
+	// }()
+	//runtime.SetMutexProfileFraction(1000)
+	profile := pprof.Lookup("goroutine")
+	defer profile.WriteTo(f, 1)
+	//runtime.SetBlockProfileRate(1000)
+
 	var config triebwerk.Config
 	// load env vars into config struct
 	if err := envconfig.Process("", &config); err != nil {
@@ -46,6 +63,14 @@ func main() {
 	transport.RegisterNewConnHandler(controller.RegisterPlayer)
 	transport.UnregisterConnHandler(controller.UnregisterPlayer)
 
-	// start game server
-	log.Fatal(controller.Init())
+	go func() {
+		// start game server
+		log.Fatal(controller.Init())
+	}()
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
+	s := <-sigs
+	log.Printf("shutdown with signal %s", s)
+
 }
