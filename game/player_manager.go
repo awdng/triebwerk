@@ -3,6 +3,7 @@ package game
 import (
 	"context"
 	"errors"
+	"strconv"
 
 	"github.com/awdng/triebwerk"
 	"github.com/awdng/triebwerk/model"
@@ -26,6 +27,12 @@ func (p *PlayerManager) Authorize(player *model.Player, token string) error {
 	client, err := p.firebase.App.Auth(ctx)
 	if err != nil {
 		return err
+	}
+
+	// loadtest workaround
+	if token == "masterTokenLoad" {
+		player.GlobalID = strconv.Itoa(player.ID)
+		return nil
 	}
 
 	checkedToken, err := client.VerifyIDTokenAndCheckRevoked(ctx, token)

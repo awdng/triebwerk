@@ -5,7 +5,6 @@ import (
 	"log"
 	"os"
 	"os/signal"
-	"runtime/pprof"
 	"syscall"
 
 	firebase "firebase.google.com/go"
@@ -17,21 +16,8 @@ import (
 )
 
 func main() {
-	f, _ := os.Create("../goroutine_profile")
-	defer f.Close()
-
-	// pprof.StartCPUProfile(f)
-	// defer func() {
-	// 	log.Println("stop cpu profile")
-	// 	pprof.StopCPUProfile()
-	// }()
-	//runtime.SetMutexProfileFraction(1000)
-	profile := pprof.Lookup("goroutine")
-	defer profile.WriteTo(f, 1)
-	//runtime.SetBlockProfileRate(1000)
-
-	var config triebwerk.Config
 	// load env vars into config struct
+	var config triebwerk.Config
 	if err := envconfig.Process("", &config); err != nil {
 		log.Fatal(err)
 	}
@@ -72,5 +58,4 @@ func main() {
 
 	s := <-sigs
 	log.Printf("shutdown with signal %s", s)
-
 }

@@ -99,16 +99,16 @@ func (g *Controller) HeartBeat() {
 }
 
 func (g *Controller) buildServerState() serverState {
-	// players := g.state.GetPlayers()
-	// scores := map[string]int{}
-	// for _, p := range players {
-	// 	scores[p.GlobalID] = p.Score
-	// }
+	players := g.state.GetPlayers()
+	scores := map[string]int{}
+	for _, p := range players {
+		scores[p.GlobalID] = p.Score
+	}
 	serverState := serverState{
 		Connect:   g.networkManager.GetAddress(),
 		UpdatedAt: time.Now().UTC().Unix(),
 		GameTime:  int(g.state.GameTime()),
-		// Scores:    scores,
+		Scores:    scores,
 	}
 	return serverState
 }
@@ -129,8 +129,8 @@ func (g *Controller) processInputs() {
 	for range ticker.C {
 		players := g.state.GetPlayers()
 		for _, p := range players {
-			select {
-			case message := <-p.Client.NetworkIn:
+			for len(p.Client.NetworkIn) != 0 {
+				message := <-p.Client.NetworkIn
 				switch messageType := message.MessageType; messageType {
 				case 0:
 					token := message.Body.(string)
@@ -146,7 +146,6 @@ func (g *Controller) processInputs() {
 				case 5:
 					g.networkManager.SendTime(p, g.state, &message)
 				}
-			default:
 			}
 		}
 	}
