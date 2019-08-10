@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"log"
 	"os"
 	"os/signal"
@@ -16,6 +17,9 @@ import (
 )
 
 func main() {
+	port := flag.Int("port", 0, "game server port, leave blank for auto")
+	flag.Parse()
+
 	// load env vars into config struct
 	var config triebwerk.Config
 	if err := envconfig.Process("", &config); err != nil {
@@ -43,7 +47,7 @@ func main() {
 	log.Printf("Loading Triebwerk ...")
 
 	playerManager := game.NewPlayerManager(firebase)
-	transport := websocket.NewTransport(config.PublicIP)
+	transport := websocket.NewTransport(config.PublicIP, *port)
 	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
 	controller := game.NewController(networkManager, playerManager, firebase)
 	transport.RegisterNewConnHandler(controller.RegisterPlayer)

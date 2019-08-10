@@ -23,9 +23,10 @@ type Transport struct {
 }
 
 // NewTransport creates the websocket context
-func NewTransport(address string) *Transport {
+func NewTransport(address string, port int) *Transport {
 	return &Transport{
 		address: address,
+		port:    port,
 		upgrader: websocket.Upgrader{
 			ReadBufferSize:  1024,
 			WriteBufferSize: 1024,
@@ -71,7 +72,7 @@ func (t *Transport) Init() {
 
 // Run ...
 func (t *Transport) Run() error {
-	listener, err := net.Listen("tcp", ":0")
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", t.port))
 	if err != nil {
 		panic(err)
 	}

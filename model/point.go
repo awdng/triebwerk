@@ -24,10 +24,8 @@ func (p *Point) DirectionTo(v *Point) *Point {
 
 // WithinDistanceOf radius to another Point
 func (p *Point) WithinDistanceOf(radius float32, v *Point) bool {
-	if math.Pow(float64(v.X-p.X), 2)+math.Pow(float64(v.Y-p.Y), 2) < math.Pow(float64(radius), 2) {
-		return true
-	}
-	return false
+	isInRadius := math.Pow(float64(v.X-p.X), 2)+math.Pow(float64(v.Y-p.Y), 2) < math.Pow(float64(radius), 2)
+	return isInRadius
 }
 
 // IsInPolygon adapted from https://wrf.ecse.rpi.edu/Research/Short_Notes/pnpoly.html
