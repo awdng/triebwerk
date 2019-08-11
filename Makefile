@@ -1,8 +1,8 @@
 # runtime options
 COMMIT_HASH = $(shell git rev-parse --short HEAD)
 TAG         = $(shell git symbolic-ref -q --short HEAD || git describe --tags --exact-match)
-GOPACKAGES  = $(shell go list ./...)
-GOFILES		= $(shell find . -type f -name '*.go' -not -path "./vendor/*")
+GOPACKAGES  = $(shell go list ./... | grep -v cmd/wasm)
+GOFILES		= $(shell find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./cmd/wasm/*")
 HAS_GOLINT  = $(shell command -v golint)
 
 # go options
@@ -42,7 +42,7 @@ vet: ## Perform vet checks
 test: fmt-check vet test-unit ## Execute all checks and tests
 
 test-unit: ## Execute unit tests
-	$(GO) test -race -v ./...
+	$(GO) test -race -v $(GOPACKAGES)
 
 integration-test: ## Execute integration tests
 	@test -f .env || (echo "File \".env\" does not exist and is needed to run integration test" && exit 1)

@@ -16,10 +16,10 @@ var totalMeasurement int64
 var avgTickTime float64
 
 type serverState struct {
-	Connect   string         `firestore:"connect"`
-	Scores    map[string]int `firestore:"scores"`
+	Connect   string         `firestore:"connect"`
+	Scores    map[string]int `firestore:"scores"`
 	GameTime  int            `firestore:"gametime"`
-	UpdatedAt int64          `firestore:"updated_at"`
+	UpdatedAt int64          `firestore:"updated_at"`
 }
 
 // Controller ...
