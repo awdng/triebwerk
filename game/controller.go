@@ -16,10 +16,11 @@ var totalMeasurement int64
 var avgTickTime float64
 
 type serverState struct {
-	Connect   string         `firestore:"connect"`
-	Scores    map[string]int `firestore:"scores"`
-	GameTime  int            `firestore:"gametime"`
-	UpdatedAt int64          `firestore:"updated_at"`
+	Connect   string            `firestore:"public_ip"`
+	Scores    map[string]int    `firestore:"scores"`
+	Names     map[string]string `firestore:"names"`
+	GameTime  int               `firestore:"gametime"`
+	UpdatedAt int64             `firestore:"updated_at"`
 }
 
 // Controller ...
@@ -104,11 +105,16 @@ func (g *Controller) buildServerState() serverState {
 	for _, p := range players {
 		scores[p.GlobalID] = p.Score
 	}
+	names := map[string]string{}
+	for _, p := range players {
+		names[p.GlobalID] = p.Nickname
+	}
 	serverState := serverState{
 		Connect:   g.networkManager.GetAddress(),
 		UpdatedAt: time.Now().UTC().Unix(),
 		GameTime:  int(g.state.GameTime()),
 		Scores:    scores,
+		Names:     names,
 	}
 	return serverState
 }

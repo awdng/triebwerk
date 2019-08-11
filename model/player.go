@@ -37,6 +37,7 @@ type Player struct {
 	ID               int
 	GlobalID         string
 	AuthToken        string
+	Nickname         string
 	Health           int
 	Score            int
 	respawnCountdown float32

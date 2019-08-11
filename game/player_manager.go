@@ -40,6 +40,9 @@ func (p *PlayerManager) Authorize(player *model.Player, token string) error {
 		return err
 	}
 	player.GlobalID = checkedToken.UID
+	if name, ok := checkedToken.Claims["name"]; ok {
+		player.Nickname = name.(string)
+	}
 
 	// user did not verify email
 	if emailVerified, ok := checkedToken.Claims["email_verified"]; ok {
