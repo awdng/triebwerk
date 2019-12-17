@@ -8,6 +8,7 @@ import (
 // Config from Environment Vars
 type Config struct {
 	PublicIP string `envconfig:"PUBLIC_IP" required:"false" default:"localhost"`
+	Port     int    `envconfig:"PORT" required:"false" default:"80"`
 }
 
 // Firebase ...

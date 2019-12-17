@@ -1,7 +1,5 @@
 main
 .env
-modd.*
 *.wasm
-*.sh
 firebase.json
 compiled/*

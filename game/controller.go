@@ -68,9 +68,6 @@ func (g *Controller) UnregisterPlayer(conn model.Connection) {
 
 // Init the gameserver
 func (g *Controller) Init() error {
-	// goroutine constantly reads player input
-	go g.processInputs()
-
 	// init HeartBeat
 	go g.HeartBeat()
 
@@ -128,31 +125,26 @@ func (g *Controller) Start() {
 	}
 }
 
-func (g *Controller) processInputs() {
-	// continously read all player inputs
-	ticker := time.NewTicker(10 * time.Millisecond)
-	defer ticker.Stop()
-	for range ticker.C {
-		players := g.state.GetPlayers()
-		for _, p := range players {
-			for len(p.Client.NetworkIn) != 0 {
-				message := <-p.Client.NetworkIn
-				switch messageType := message.MessageType; messageType {
-				case 0:
-					token := message.Body.(string)
-					err := g.playerManager.Authorize(p, token)
-					if err != nil {
-						log.Printf("GameManager: Player %d (%s) could not be verified, forcing disconnect: %s", p.ID, p.GlobalID, err)
-						g.networkManager.ForceDisconnect(p)
-						continue
-					}
-					log.Printf("GameManager: Player %d authorized successfully as GlobalID %s", p.ID, p.GlobalID)
-				case 1:
-					p.Control = message.Body.(model.Controls)
-				case 5:
-					g.networkManager.SendTime(p, g.state, &message)
-				}
+func (g *Controller) processInputs(p *model.Player, players []*model.Player, timestep float32) {
+	// read control input
+	for len(p.Client.NetworkIn) != 0 {
+		message := <-p.Client.NetworkIn
+		switch messageType := message.MessageType; messageType {
+		case 0:
+			token := message.Body.(string)
+			err := g.playerManager.Authorize(p, token)
+			if err != nil {
+				log.Printf("GameManager: Player %d (%s) could not be verified, forcing disconnect: %s", p.ID, p.GlobalID, err)
+				g.networkManager.ForceDisconnect(p)
+				continue
 			}
+			log.Printf("GameManager: Player %d authorized successfully as GlobalID %s", p.ID, p.GlobalID)
+		case 1:
+			// make sure all input gets processed
+			p.Control = message.Body.(model.Controls)
+			p.Update(players, g.state, timestep)
+		case 5:
+			g.networkManager.SendTime(p, g.state, &message)
 		}
 	}
 }
@@ -172,7 +164,7 @@ func (g *Controller) gameLoop() {
 
 		// apply latest client inputs
 		for _, p := range players {
-			p.Update(players, g.state, timestep)
+			g.processInputs(p, players, timestep)
 			p.HandleRespawn(g.state)
 		}
 
