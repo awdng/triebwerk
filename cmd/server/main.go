@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	firebase "firebase.google.com/go"
 	"github.com/awdng/triebwerk"
@@ -13,6 +15,9 @@ import (
 	"github.com/awdng/triebwerk/protocol"
 	websocket "github.com/awdng/triebwerk/transport"
 	"github.com/kelseyhightower/envconfig"
+
+	pb "github.com/awdng/panzr-api/gameserver"
+	"google.golang.org/grpc"
 )
 
 func main() {
@@ -48,6 +53,25 @@ func main() {
 	controller := game.NewController(networkManager, playerManager, firebase)
 	transport.RegisterNewConnHandler(controller.RegisterPlayer)
 	transport.UnregisterConnHandler(controller.UnregisterPlayer)
+
+	var opts []grpc.DialOption
+	opts = append(opts, grpc.WithBlock())
+	opts = append(opts, grpc.WithInsecure())
+
+	conn, err := grpc.Dial("localhost:8081", opts...)
+	if err != nil {
+		log.Fatalf("fail to dial: %v", err)
+	}
+	defer conn.Close()
+	pbclient := pb.NewGameServerMasterClient(conn)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	state, err := pbclient.GetServerState(ctx, &pb.ServerStateRequest{})
+	if err != nil {
+		log.Fatalf("%v.ListFeatures(_) = _, %v", pbclient, err)
+	}
+	fmt.Println(state)
 
 	go func() {
 		// start game server
