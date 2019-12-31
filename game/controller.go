@@ -15,6 +15,9 @@ var numMeasurements int64
 var totalMeasurement int64
 var avgTickTime float64
 
+type MasterServerManager interface {
+}
+
 type serverState struct {
 	Connect   string            `firestore:"public_ip"`
 	Scores    map[string]int    `firestore:"scores"`

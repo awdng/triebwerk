@@ -2,16 +2,15 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	firebase "firebase.google.com/go"
 	"github.com/awdng/triebwerk"
 	"github.com/awdng/triebwerk/game"
+	"github.com/awdng/triebwerk/infra"
 	"github.com/awdng/triebwerk/protocol"
 	websocket "github.com/awdng/triebwerk/transport"
 	"github.com/kelseyhightower/envconfig"
@@ -64,14 +63,8 @@ func main() {
 	}
 	defer conn.Close()
 	pbclient := pb.NewGameServerMasterClient(conn)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-	defer cancel()
-	state, err := pbclient.GetServerState(ctx, &pb.ServerStateRequest{})
-	if err != nil {
-		log.Fatalf("%v.ListFeatures(_) = _, %v", pbclient, err)
-	}
-	fmt.Println(state)
+	masterServer := infra.NewMasterServer(pbclient)
+	masterServer.GetHeartBeat()
 
 	go func() {
 		// start game server
