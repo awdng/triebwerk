@@ -44,15 +44,6 @@ func main() {
 		Store: client,
 	}
 
-	log.Printf("Loading Triebwerk ...")
-
-	playerManager := game.NewPlayerManager(firebase)
-	transport := websocket.NewTransport(config.PublicIP, config.Port)
-	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
-	controller := game.NewController(networkManager, playerManager, firebase)
-	transport.RegisterNewConnHandler(controller.RegisterPlayer)
-	transport.UnregisterConnHandler(controller.UnregisterPlayer)
-
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithBlock())
 	opts = append(opts, grpc.WithInsecure())
@@ -63,8 +54,16 @@ func main() {
 	}
 	defer conn.Close()
 	pbclient := pb.NewGameServerMasterClient(conn)
-	masterServer := infra.NewMasterServer(pbclient)
-	masterServer.GetHeartBeat()
+	masterServer := infra.NewMasterServerClient(pbclient)
+
+	log.Printf("Loading Triebwerk ...")
+
+	playerManager := game.NewPlayerManager(firebase)
+	transport := websocket.NewTransport(config.PublicIP, config.Port)
+	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
+	controller := game.NewController(networkManager, playerManager, firebase, masterServer)
+	transport.RegisterNewConnHandler(controller.RegisterPlayer)
+	transport.UnregisterConnHandler(controller.UnregisterPlayer)
 
 	go func() {
 		// start game server

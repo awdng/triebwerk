@@ -66,12 +66,13 @@ func NewPlayer(id int, x float32, y float32, conn Connection) *Player {
 // Update Tick for Player
 func (p *Player) Update(players []*Player, game *GameState, dt float32) {
 	m := game.Map
+	if !p.IsAlive() {
+		p.respawnCountdown += dt
+		return
+	}
+
 	p.HandleMovement(players, m, dt)
 	p.HandleWeapons(players, m, dt)
-
-	if p.Health == 0 {
-		p.respawnCountdown += dt
-	}
 }
 
 // HandleRespawn ...

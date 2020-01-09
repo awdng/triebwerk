@@ -1,7 +1,6 @@
 package game
 
 import (
-	"context"
 	"log"
 	"time"
 
@@ -14,9 +13,6 @@ const tickrate = 30
 var numMeasurements int64
 var totalMeasurement int64
 var avgTickTime float64
-
-type MasterServerManager interface {
-}
 
 type serverState struct {
 	Connect   string            `firestore:"public_ip"`
@@ -33,15 +29,24 @@ type Controller struct {
 	playerManager  *PlayerManager
 	state          *model.GameState
 	firebase       *triebwerk.Firebase
+	masterServer   MasterServerClient
+}
+
+// MasterServerClient ...
+type MasterServerClient interface {
+	Init(address string)
+	GetServerState()
+	SendHeartbeat(gameState *model.GameState)
 }
 
 // NewController creates a game instance
-func NewController(networkManager *NetworkManager, playerManager *PlayerManager, firebase *triebwerk.Firebase) *Controller {
+func NewController(networkManager *NetworkManager, playerManager *PlayerManager, firebase *triebwerk.Firebase, masterServer MasterServerClient) *Controller {
 	return &Controller{
 		networkManager: networkManager,
 		playerManager:  playerManager,
 		state:          model.NewGameState(),
 		firebase:       firebase,
+		masterServer:   masterServer,
 	}
 }
 
@@ -83,40 +88,14 @@ func (g *Controller) HeartBeat() {
 	// Wait for Network to become ready
 	time.Sleep(time.Second)
 
-	ctx := context.Background()
-	server, _, err := g.firebase.Store.Collection("Server").Add(ctx, g.buildServerState())
-	if err != nil {
-		log.Fatal(err)
-	}
-	log.Printf("GameManager: Server Registered with global ID %s", server.ID)
+	// log.Printf("GameManager: Server Registered with global ID %s", server.ID)
 
 	ticker := time.NewTicker(time.Second * 5)
+	g.masterServer.Init(g.networkManager.GetAddress())
+	g.masterServer.GetServerState()
 	for range ticker.C {
-		_, err := server.Set(ctx, g.buildServerState())
-		if err != nil {
-			log.Printf(err.Error())
-		}
+		g.masterServer.SendHeartbeat(g.state)
 	}
-}
-
-func (g *Controller) buildServerState() serverState {
-	players := g.state.GetPlayers()
-	scores := map[string]int{}
-	for _, p := range players {
-		scores[p.GlobalID] = p.Score
-	}
-	names := map[string]string{}
-	for _, p := range players {
-		names[p.GlobalID] = p.Nickname
-	}
-	serverState := serverState{
-		Connect:   g.networkManager.GetAddress(),
-		UpdatedAt: time.Now().UTC().Unix(),
-		GameTime:  int(g.state.GameTime()),
-		Scores:    scores,
-		Names:     names,
-	}
-	return serverState
 }
 
 // Start the gameserver loop
@@ -150,16 +129,17 @@ func (g *Controller) processInputs(p *model.Player, players []*model.Player, tim
 			g.networkManager.SendTime(p, g.state, &message)
 		}
 	}
+	if len(p.Client.NetworkIn) > 1 {
+		log.Printf("WARNING: GameManager: Applied more than 1 input for Player %d with GlobalID %s", p.ID, p.GlobalID)
+	}
 }
 
 func (g *Controller) gameLoop() {
-	ctx := context.Background()
 	interval := time.Duration(int(1000/tickrate)) * time.Millisecond
 	timestep := float32(interval/time.Millisecond) / 1000
 
 	ticker := time.NewTicker(interval)
-	defer ticker.Stop()
-
+	g.networkManager.BroadcastGameStart(g.state)
 	log.Printf("GameManager: Game has started")
 	for range ticker.C {
 		g.tickStart = time.Now()
@@ -175,15 +155,7 @@ func (g *Controller) gameLoop() {
 		g.networkManager.BroadcastGameState(g.state)
 
 		if g.state.HasEnded() {
-			g.state.End()
-			log.Printf("GameManager: Game has ended")
-			_, _, err := g.firebase.Store.Collection("Match").Add(ctx, g.buildServerState())
-			if err != nil {
-				log.Fatal(err)
-			}
-			time.Sleep(10 * time.Second)
-			g.Start()
-			return
+			break
 		}
 
 		// measure average tick time
@@ -191,4 +163,12 @@ func (g *Controller) gameLoop() {
 		totalMeasurement += time.Now().UTC().UnixNano() - g.tickStart.UTC().UnixNano()
 		avgTickTime = float64(totalMeasurement/numMeasurements) / 1000 / 1000
 	}
+	ticker.Stop()
+
+	g.state.End()
+	log.Printf("GameManager: Game has ended")
+	g.networkManager.BroadcastGameEnd(g.state)
+
+	time.Sleep(10 * time.Second)
+	g.Start()
 }
