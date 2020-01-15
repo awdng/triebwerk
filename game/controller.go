@@ -92,7 +92,6 @@ func (g *Controller) HeartBeat() {
 
 	ticker := time.NewTicker(time.Second * 5)
 	g.masterServer.Init(g.networkManager.GetAddress())
-	g.masterServer.GetServerState()
 	for range ticker.C {
 		g.masterServer.SendHeartbeat(g.state)
 	}

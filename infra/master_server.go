@@ -32,15 +32,13 @@ func (m *MasterServerClient) Init(address string) {
 func (m *MasterServerClient) GetServerState() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	state, err := m.grpcClient.GetServerState(ctx, &pb.ServerStateRequest{
-		State: &pb.ServerState{
-			Address: m.address,
-		},
+	state, err := m.grpcClient.GetServerState(ctx, &pb.GetServerRequest{
+		Address: m.address,
 	})
 	if err != nil {
 		log.Println("Error Receiving ServerState - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
 	}
-	fmt.Println("We got this server state on init", state)
+	fmt.Println(state)
 }
 
 // SendHeartbeat ...
