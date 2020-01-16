@@ -189,6 +189,17 @@ func (n *NetworkManager) BroadcastGameStart(state *model.GameState) {
 	}
 }
 
+// SendGameStartToClient ...
+func (n *NetworkManager) SendGameStartToClient(client *model.Client, state *model.GameState) {
+	buf := n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
+		MessageType: uint8(gameStart),
+	})
+
+	if len(buf) > 0 {
+		n.Send(client, buf)
+	}
+}
+
 // BroadcastGameEnd ...
 func (n *NetworkManager) BroadcastGameEnd(state *model.GameState) {
 	buf := n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{

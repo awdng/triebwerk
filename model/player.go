@@ -113,7 +113,6 @@ func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 			continue
 		}
 		if r.collisionPolygon(enemy.Collider.getPolygon()) { // simple check if polygons intersect
-			fmt.Println("Colliding with palyer")
 			r.collisionFrontRect(*enemy.Collider)
 			if r.CollisionFront {
 				break

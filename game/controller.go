@@ -58,7 +58,10 @@ func (g *Controller) RegisterPlayer(conn model.Connection) {
 	player := model.NewPlayer(pID, spawn.X, spawn.Y, conn)
 	g.networkManager.Register(player, g.state)
 	g.state.AddPlayer(player)
-	g.Start()
+	g.CheckStartConditions()
+	if g.state.InProgress() { // game already started, new Player has to know about it
+		g.networkManager.SendGameStartToClient(player.Client, g.state)
+	}
 	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.GetPlayerCount())
 }
 
@@ -97,8 +100,8 @@ func (g *Controller) HeartBeat() {
 	}
 }
 
-// Start the gameserver loop
-func (g *Controller) Start() {
+// CheckStartConditions the gameserver loop
+func (g *Controller) CheckStartConditions() {
 	if g.state.ReadyToStart() {
 		g.state.Start()
 		// Execute game loop
@@ -169,5 +172,5 @@ func (g *Controller) gameLoop() {
 	g.networkManager.BroadcastGameEnd(g.state)
 
 	time.Sleep(10 * time.Second)
-	g.Start()
+	g.CheckStartConditions()
 }
