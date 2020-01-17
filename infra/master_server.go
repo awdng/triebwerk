@@ -14,6 +14,7 @@ import (
 type MasterServerClient struct {
 	grpcClient pb.GameServerMasterClient
 	address    string
+	id         string
 }
 
 // NewMasterServerClient ...
@@ -26,6 +27,7 @@ func NewMasterServerClient(grpc pb.GameServerMasterClient) *MasterServerClient {
 // Init ...
 func (m *MasterServerClient) Init(address string) {
 	m.address = address
+	m.registerServer()
 }
 
 // GetServerState ...
@@ -33,12 +35,25 @@ func (m *MasterServerClient) GetServerState() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	state, err := m.grpcClient.GetServerState(ctx, &pb.GetServerRequest{
-		Address: m.address,
+		Id: m.id,
 	})
 	if err != nil {
 		log.Println("Error Receiving ServerState - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
 	}
 	fmt.Println(state)
+}
+
+// RegisterServer ...
+func (m *MasterServerClient) registerServer() {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	server, err := m.grpcClient.RegisterServer(ctx, &pb.ServerRegisterRequest{
+		Address: m.address,
+	})
+	if err != nil {
+		log.Println("Error Registering Server - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
+	}
+	m.id = server.Id
 }
 
 // SendHeartbeat ...

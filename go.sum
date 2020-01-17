@@ -21,6 +21,10 @@ github.com/awdng/panzr-api v0.0.0-20200114214337-5964bda8e32e h1:UpdC37KLhRV+xPd
 github.com/awdng/panzr-api v0.0.0-20200114214337-5964bda8e32e/go.mod h1:tgreT1VZZ93eFugLbe5+CsOXffLuR3BjKya/bO3jTgE=
 github.com/awdng/panzr-api v0.0.0-20200115080529-4223666e12e1 h1:SEQvy1VioC7iDB+q15Plqkb4mfkuJuEvtvmWTDUN0t8=
 github.com/awdng/panzr-api v0.0.0-20200115080529-4223666e12e1/go.mod h1:LOiHOie85N2naTIB/wP/b/hgRupOczsnRAUVIwh7BiI=
+github.com/awdng/panzr-api v0.0.0-20200117075120-98265718a90c h1:Nfz2Dc8xa3fslx1H0DisgJJ7uImR0sAfj73ItBxhmfc=
+github.com/awdng/panzr-api v0.0.0-20200117075120-98265718a90c/go.mod h1:wTmvYsYoc6hfrYJtNtwT0/BEYk2uUD7zM8zN5HdSI68=
+github.com/awdng/panzr-api v0.0.0-20200117075354-6da0eea59a57 h1:+QrUFQmm1YSuNxBu3v/BWEupOtz1NmstxT0UGh+t6xE=
+github.com/awdng/panzr-api v0.0.0-20200117075354-6da0eea59a57/go.mod h1:wTmvYsYoc6hfrYJtNtwT0/BEYk2uUD7zM8zN5HdSI68=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/cespare/xxhash v1.1.0/go.mod h1:XrSqR1VqqWfGrhpAt58auRo0WTKS1nRRg3ghfAqPWnc=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
@@ -93,6 +97,7 @@ github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:
 github.com/rogpeppe/fastuuid v1.2.0/go.mod h1:jVj6XXZzXRy/MSR5jhDC/2q6DgLz+nrA6LYCDYWNEvQ=
 github.com/rogpeppe/go-internal v1.3.0/go.mod h1:M8bDsm7K2OlrFYOpmOWEs/qY81heoFRclV5y23lUDJ4=
 github.com/russross/blackfriday v1.5.2/go.mod h1:JO/DiYxRf+HjHt06OyowR9PTA263kcR/rfWxYHBV53g=
+github.com/satori/go.uuid v1.2.0/go.mod h1:dA0hQrYB0VpLJoorglMZABFdXlWrHn1NEOzdhQKdks0=
 github.com/spaolacci/murmur3 v0.0.0-20180118202830-f09979ecbc72/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spaolacci/murmur3 v1.1.0/go.mod h1:JwIasOWyU6f++ZhiEuf87xNszmSA2myDM2Kzu9HwQUA=
 github.com/spf13/afero v1.1.2/go.mod h1:j4pytiNVoe2o6bmDsKpLACNPDBIoEAkihy7loJ1B0CQ=
