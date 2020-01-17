@@ -61,7 +61,7 @@ func (m *MasterServerClient) SendHeartbeat(gameState *model.GameState) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	state, err := m.grpcClient.SendHeartbeat(ctx, &pb.ServerStateRequest{
-		State: buildServerState(gameState, m.address),
+		State: m.buildServerState(gameState),
 	})
 	if err != nil {
 		log.Println("Error Sending ServerState - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
@@ -69,7 +69,7 @@ func (m *MasterServerClient) SendHeartbeat(gameState *model.GameState) {
 	fmt.Println(state)
 }
 
-func buildServerState(gameState *model.GameState, address string) *pb.ServerState {
+func (m *MasterServerClient) buildServerState(gameState *model.GameState) *pb.ServerState {
 	statePlayers := gameState.GetPlayers()
 
 	players := []*pb.Player{}
@@ -83,7 +83,8 @@ func buildServerState(gameState *model.GameState, address string) *pb.ServerStat
 	}
 
 	return &pb.ServerState{
-		Address:     address,
+		Id:          m.id,
+		Address:     m.address,
 		UpdatedAt:   int32(time.Now().UTC().Unix()),
 		ElapsedTime: int32(gameState.GameTime()),
 		Players:     players,
