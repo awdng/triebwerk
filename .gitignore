@@ -3,3 +3,4 @@ main
 *.wasm
 firebase.json
 compiled/*
+cloudbuild.yaml

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	firebase "firebase.google.com/go"
 	"github.com/awdng/triebwerk"
@@ -15,7 +16,7 @@ import (
 	websocket "github.com/awdng/triebwerk/transport"
 	"github.com/kelseyhightower/envconfig"
 
-	pb "github.com/awdng/panzr-api/gameserver"
+	pb "github.com/awdng/triebwerk-proto/gameserver"
 	"google.golang.org/grpc"
 )
 
@@ -47,11 +48,18 @@ func main() {
 	var opts []grpc.DialOption
 	opts = append(opts, grpc.WithBlock())
 	opts = append(opts, grpc.WithInsecure())
+	opts = append(opts, grpc.WithTimeout(5*time.Second))
 
-	conn, err := grpc.Dial("localhost:8081", opts...)
-	if err != nil {
-		log.Fatalf("fail to dial: %v", err)
+	var conn *grpc.ClientConn
+	for conn == nil {
+		conn, err = grpc.Dial("138.68.79.179:8081", opts...)
+		if err != nil {
+			log.Printf("failed to connect to GRPC backend: %v", err)
+			log.Println("Retrying...")
+			time.Sleep(2 * time.Second)
+		}
 	}
+
 	defer conn.Close()
 	pbclient := pb.NewGameServerMasterClient(conn)
 	masterServer := infra.NewMasterServerClient(pbclient)

@@ -6,7 +6,7 @@ import (
 	"log"
 	"time"
 
-	pb "github.com/awdng/panzr-api/gameserver"
+	pb "github.com/awdng/triebwerk-proto/gameserver"
 	"github.com/awdng/triebwerk/model"
 )
 

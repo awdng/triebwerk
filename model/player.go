@@ -231,6 +231,7 @@ type Client struct {
 // Disconnect Client from the network
 func (c *Client) Disconnect() {
 	close(c.NetworkOut)
+	close(c.NetworkIn)
 }
 
 // NetworkMessage represents an network message from or to a Client
