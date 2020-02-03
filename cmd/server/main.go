@@ -52,7 +52,7 @@ func main() {
 
 	var conn *grpc.ClientConn
 	for conn == nil {
-		conn, err = grpc.Dial("138.68.79.179:8081", opts...)
+		conn, err = grpc.Dial(config.MasterServerGRPC, opts...)
 		if err != nil {
 			log.Printf("failed to connect to GRPC backend: %v", err)
 			log.Println("Retrying...")

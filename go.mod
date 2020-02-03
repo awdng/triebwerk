@@ -5,7 +5,7 @@ go 1.13
 require (
 	cloud.google.com/go v0.43.0
 	firebase.google.com/go v3.8.1+incompatible
-	github.com/awdng/triebwerk-proto v0.0.0-20200118210107-797d51197146
+	github.com/awdng/triebwerk-proto v0.0.0-20200203081508-f4b5dc31420b
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/gorilla/websocket v1.4.0
 	github.com/grpc-ecosystem/grpc-gateway v1.12.1 // indirect

@@ -69,6 +69,22 @@ func (m *MasterServerClient) SendHeartbeat(gameState *model.GameState) {
 	fmt.Println(state)
 }
 
+// AuthorizePlayer ...
+func (m *MasterServerClient) AuthorizePlayer(token string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	authResp, err := m.grpcClient.AuthorizePlayer(ctx, &pb.AuthorizePlayerRequest{
+		Token: token,
+	})
+	if err != nil {
+		log.Println("Error authorizing player - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
+		// todo wrap error
+		return err
+	}
+	fmt.Println(authResp)
+	return nil
+}
+
 func (m *MasterServerClient) buildServerState(gameState *model.GameState) *pb.ServerState {
 	statePlayers := gameState.GetPlayers()
 

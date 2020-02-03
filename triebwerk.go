@@ -7,8 +7,9 @@ import (
 
 // Config from Environment Vars
 type Config struct {
-	PublicIP string `envconfig:"PUBLIC_IP" required:"false" default:"localhost"`
-	Port     int    `envconfig:"PORT" required:"false" default:"80"`
+	PublicIP         string `envconfig:"PUBLIC_IP" required:"false" default:"localhost"`
+	MasterServerGRPC string `envconfig:"MASTERSERVER_GRPC" required:"false" default:"localhost:8081"`
+	Port             int    `envconfig:"PORT" required:"false" default:"80"`
 }
 
 // Firebase ...

@@ -37,6 +37,7 @@ type MasterServerClient interface {
 	Init(address string)
 	GetServerState()
 	SendHeartbeat(gameState *model.GameState)
+	AuthorizePlayer(token string) error
 }
 
 // NewController creates a game instance
@@ -116,9 +117,10 @@ func (g *Controller) processInputs(p *model.Player, players []*model.Player, tim
 		switch messageType := message.MessageType; messageType {
 		case 0:
 			token := message.Body.(string)
-			err := g.playerManager.Authorize(p, token)
+			err := g.masterServer.AuthorizePlayer(token)
+			// err := g.playerManager.Authorize(p, token)
 			if err != nil {
-				log.Printf("GameManager: Player %d (%s) could not be verified, forcing disconnect: %s", p.ID, p.GlobalID, err)
+				log.Printf("GameManager: Player %d (%s) could not be authorized, forcing disconnect: %s", p.ID, p.GlobalID, err)
 				g.networkManager.ForceDisconnect(p)
 				continue
 			}
