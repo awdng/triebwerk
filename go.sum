@@ -12,6 +12,8 @@ github.com/awdng/triebwerk-proto v0.0.0-20200118210107-797d51197146 h1:sxUmPukLF
 github.com/awdng/triebwerk-proto v0.0.0-20200118210107-797d51197146/go.mod h1:oHrJpWV3BHtDBze652ia9ytuiY7H3sLmjFujmZf4Sfk=
 github.com/awdng/triebwerk-proto v0.0.0-20200203081508-f4b5dc31420b h1:imazkRBDkPpQ3RAmuTHiF1sJWHOusS2GsHRFGXwvk0M=
 github.com/awdng/triebwerk-proto v0.0.0-20200203081508-f4b5dc31420b/go.mod h1:oHrJpWV3BHtDBze652ia9ytuiY7H3sLmjFujmZf4Sfk=
+github.com/awdng/triebwerk-proto v0.0.0-20200216152829-1aa13ba7e72e h1:D7+VitOz1nJ+FbumSf68gIUeCWKEGVOzajqc0Awz5eA=
+github.com/awdng/triebwerk-proto v0.0.0-20200216152829-1aa13ba7e72e/go.mod h1:oHrJpWV3BHtDBze652ia9ytuiY7H3sLmjFujmZf4Sfk=
 github.com/census-instrumentation/opencensus-proto v0.2.1/go.mod h1:f6KPmirojxKA12rnyqOA5BBL4O983OfeGPqjHWSTneU=
 github.com/client9/misspell v0.3.4/go.mod h1:qj6jICC3Q7zFZvVWo7KLAzC3yx5G7kyvSDkc90ppPyw=
 github.com/davecgh/go-spew v1.1.0 h1:ZDRjVQ15GmhC3fiQ8ni8+OwkZQO4DARzQgrnXU1Liz8=

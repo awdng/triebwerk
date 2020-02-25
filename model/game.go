@@ -33,7 +33,7 @@ func NewGameState() *GameState {
 
 // ReadyToStart ...
 func (g *GameState) ReadyToStart() bool {
-	return g.GetPlayerCount() >= 2 && !g.InProgress()
+	return g.GetPlayerCount() >= 1 && !g.InProgress()
 }
 
 // Start ...

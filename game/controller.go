@@ -1,6 +1,7 @@
 package game
 
 import (
+	"fmt"
 	"log"
 	"time"
 
@@ -117,6 +118,7 @@ func (g *Controller) processInputs(p *model.Player, players []*model.Player, tim
 		switch messageType := message.MessageType; messageType {
 		case 0:
 			token := message.Body.(string)
+			fmt.Println("Authorizing player")
 			err := g.masterServer.AuthorizePlayer(token)
 			// err := g.playerManager.Authorize(p, token)
 			if err != nil {
