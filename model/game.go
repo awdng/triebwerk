@@ -10,6 +10,7 @@ const gameLength = 5
 
 // GameState ...
 type GameState struct {
+	Region      string
 	startTime   time.Time
 	length      time.Duration
 	inProgress  bool
@@ -21,8 +22,9 @@ type GameState struct {
 }
 
 // NewGameState ...
-func NewGameState() *GameState {
+func NewGameState(region string) *GameState {
 	return &GameState{
+		Region:     region,
 		inProgress: false,
 		length:     time.Minute * gameLength,
 		players:    make(map[int]*Player),

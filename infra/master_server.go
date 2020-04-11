@@ -60,17 +60,28 @@ func (m *MasterServerClient) registerServer() {
 func (m *MasterServerClient) SendHeartbeat(gameState *model.GameState) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
-	state, err := m.grpcClient.SendHeartbeat(ctx, &pb.ServerStateRequest{
+	_, err := m.grpcClient.SendHeartbeat(ctx, &pb.ServerStateRequest{
 		State: m.buildServerState(gameState),
 	})
 	if err != nil {
 		log.Println("Error Sending ServerState - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
 	}
-	fmt.Println(state)
+}
+
+// EndGame ...
+func (m *MasterServerClient) EndGame(gameState *model.GameState) {
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	_, err := m.grpcClient.EndGame(ctx, &pb.EndGameRequest{
+		State: m.buildServerState(gameState),
+	})
+	if err != nil {
+		log.Println("Error When Ending Game - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
+	}
 }
 
 // AuthorizePlayer ...
-func (m *MasterServerClient) AuthorizePlayer(token string) error {
+func (m *MasterServerClient) AuthorizePlayer(token string, player *model.Player) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	authResp, err := m.grpcClient.AuthorizePlayer(ctx, &pb.AuthorizePlayerRequest{
@@ -81,7 +92,9 @@ func (m *MasterServerClient) AuthorizePlayer(token string) error {
 		// todo wrap error
 		return err
 	}
-	fmt.Println(authResp)
+	player.GlobalID = authResp.GetGlobalId()
+	player.Nickname = authResp.GetName()
+
 	return nil
 }
 
@@ -99,6 +112,7 @@ func (m *MasterServerClient) buildServerState(gameState *model.GameState) *pb.Se
 	}
 
 	return &pb.ServerState{
+		Region:      gameState.Region,
 		Id:          m.id,
 		Address:     m.address,
 		UpdatedAt:   int32(time.Now().UTC().Unix()),

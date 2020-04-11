@@ -69,7 +69,7 @@ func main() {
 	playerManager := game.NewPlayerManager(firebase)
 	transport := websocket.NewTransport(config.PublicIP, config.Port)
 	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
-	controller := game.NewController(networkManager, playerManager, firebase, masterServer)
+	controller := game.NewController(config.Region, networkManager, playerManager, firebase, masterServer)
 	transport.RegisterNewConnHandler(controller.RegisterPlayer)
 	transport.UnregisterConnHandler(controller.UnregisterPlayer)
 

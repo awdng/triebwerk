@@ -1,7 +1,6 @@
 package game
 
 import (
-	"fmt"
 	"log"
 	"time"
 
@@ -37,16 +36,17 @@ type Controller struct {
 type MasterServerClient interface {
 	Init(address string)
 	GetServerState()
-	SendHeartbeat(gameState *model.GameState)
-	AuthorizePlayer(token string) error
+	SendHeartbeat(*model.GameState)
+	EndGame(*model.GameState)
+	AuthorizePlayer(string, *model.Player) error
 }
 
 // NewController creates a game instance
-func NewController(networkManager *NetworkManager, playerManager *PlayerManager, firebase *triebwerk.Firebase, masterServer MasterServerClient) *Controller {
+func NewController(region string, networkManager *NetworkManager, playerManager *PlayerManager, firebase *triebwerk.Firebase, masterServer MasterServerClient) *Controller {
 	return &Controller{
 		networkManager: networkManager,
 		playerManager:  playerManager,
-		state:          model.NewGameState(),
+		state:          model.NewGameState(region),
 		firebase:       firebase,
 		masterServer:   masterServer,
 	}
@@ -118,15 +118,14 @@ func (g *Controller) processInputs(p *model.Player, players []*model.Player, tim
 		switch messageType := message.MessageType; messageType {
 		case 0:
 			token := message.Body.(string)
-			fmt.Println("Authorizing player")
-			err := g.masterServer.AuthorizePlayer(token)
+			err := g.masterServer.AuthorizePlayer(token, p)
 			// err := g.playerManager.Authorize(p, token)
 			if err != nil {
 				log.Printf("GameManager: Player %d (%s) could not be authorized, forcing disconnect: %s", p.ID, p.GlobalID, err)
 				g.networkManager.ForceDisconnect(p)
 				continue
 			}
-			log.Printf("GameManager: Player %d authorized successfully as GlobalID %s", p.ID, p.GlobalID)
+			log.Printf("GameManager: Player %d authorized successfully as GlobalID %s %s", p.ID, p.GlobalID, p.Nickname)
 		case 1:
 			// make sure all input gets processed
 			p.Control = message.Body.(model.Controls)
@@ -174,7 +173,7 @@ func (g *Controller) gameLoop() {
 	g.state.End()
 	log.Printf("GameManager: Game has ended")
 	g.networkManager.BroadcastGameEnd(g.state)
-
+	g.masterServer.EndGame(g.state)
 	time.Sleep(10 * time.Second)
 	g.CheckStartConditions()
 }
