@@ -12,7 +12,7 @@ import (
 
 var players = make([]*model.Player, 0)
 var localPlayer *model.Player
-var gameState = model.NewGameState()
+var gameState = model.NewGameState("local")
 var controls = model.Controls{}
 
 func setInput(this js.Value, args []js.Value) interface{} {

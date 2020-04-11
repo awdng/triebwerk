@@ -31,6 +31,8 @@ const (
 	projectile
 	hit
 	serverTime
+	gameStart
+	gameEnd
 )
 
 // Protocol that encodes/decodes data for network transfer
@@ -171,6 +173,39 @@ func (n *NetworkManager) BroadcastGameState(state *model.GameState) {
 			Body:        p,
 		})...)
 	}
+	if len(buf) > 0 {
+		n.broadcast <- buf
+	}
+}
+
+// BroadcastGameStart ...
+func (n *NetworkManager) BroadcastGameStart(state *model.GameState) {
+	buf := n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
+		MessageType: uint8(gameStart),
+	})
+
+	if len(buf) > 0 {
+		n.broadcast <- buf
+	}
+}
+
+// SendGameStartToClient ...
+func (n *NetworkManager) SendGameStartToClient(client *model.Client, state *model.GameState) {
+	buf := n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
+		MessageType: uint8(gameStart),
+	})
+
+	if len(buf) > 0 {
+		n.Send(client, buf)
+	}
+}
+
+// BroadcastGameEnd ...
+func (n *NetworkManager) BroadcastGameEnd(state *model.GameState) {
+	buf := n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
+		MessageType: uint8(gameEnd),
+	})
+
 	if len(buf) > 0 {
 		n.broadcast <- buf
 	}
