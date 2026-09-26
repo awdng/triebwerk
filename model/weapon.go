@@ -25,6 +25,10 @@ func (w *Weapon) Update(players []*Player, m *Map, dt float32) {
 		b.ApplyMovement(dt)
 		// check projectile collision
 		// projectile can only hit once
+		if m.IsOutOfBounds(b.Position) || b.IsCollidingWithEnvironment(m) {
+			b.Cleanup = true
+			continue
+		}
 		for _, enemy := range players {
 			if w.owner.ID == enemy.ID || !enemy.IsAlive() {
 				continue
@@ -35,11 +39,6 @@ func (w *Weapon) Update(players []*Player, m *Map, dt float32) {
 					enemy.Health = 0
 					w.owner.Score++
 				}
-				b.Cleanup = true
-				break
-			}
-
-			if b.IsCollidingWithEnvironment(m) {
 				b.Cleanup = true
 				break
 			}

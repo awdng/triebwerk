@@ -64,10 +64,13 @@ build-static: fmt ## Build binaries statically
 	@test -f $(MKFILE_PATH).env || (echo "File \".env\" does not exist and is needed to run integration test" && exit 1)
 	@export `cat $(MKFILE_PATH).env | xargs`;
 
+loadtest: ## Run a local load test with a live view on http://localhost:8090
+	./scripts/loadtest.sh
+
 clean: ## Cleanup runtime files
 	rm -rf triebwerk *.out
 
 clean-all: clean ## Cleanup ALL runtime files
 	rm -rf triebwerk
 
-.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit integration-test cover cover-html build build-static clean clean-all
+.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit integration-test cover cover-html build build-static loadtest clean clean-all

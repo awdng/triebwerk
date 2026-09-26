@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 	"time"
 
 	pb "github.com/awdng/triebwerk-proto/gameserver"
@@ -13,6 +14,7 @@ import (
 // MasterServerClient ...
 type MasterServerClient struct {
 	grpcClient pb.GameServerMasterClient
+	mutex      sync.RWMutex
 	address    string
 	id         string
 }
@@ -26,7 +28,9 @@ func NewMasterServerClient(grpc pb.GameServerMasterClient) *MasterServerClient {
 
 // Init ...
 func (m *MasterServerClient) Init(address string) {
+	m.mutex.Lock()
 	m.address = address
+	m.mutex.Unlock()
 	m.registerServer()
 }
 
@@ -34,11 +38,12 @@ func (m *MasterServerClient) Init(address string) {
 func (m *MasterServerClient) GetServerState() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
+	id, _ := m.identity()
 	state, err := m.grpcClient.GetServerState(ctx, &pb.GetServerRequest{
-		Id: m.id,
+		Id: id,
 	})
 	if err != nil {
-		log.Println("Error Receiving ServerState - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
+		log.Printf("Error Receiving ServerState: %v", err)
 	}
 	fmt.Println(state)
 }
@@ -47,62 +52,68 @@ func (m *MasterServerClient) GetServerState() {
 func (m *MasterServerClient) registerServer() {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
+	_, address := m.identity()
 	server, err := m.grpcClient.RegisterServer(ctx, &pb.ServerRegisterRequest{
-		Address: m.address,
+		Address: address,
 	})
 	if err != nil {
-		log.Println("Error Registering Server - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
+		log.Printf("Error Registering Server: %v", err)
+		return
 	}
+	m.mutex.Lock()
 	m.id = server.Id
+	m.mutex.Unlock()
 }
 
 // SendHeartbeat ...
-func (m *MasterServerClient) SendHeartbeat(gameState *model.GameState) {
+func (m *MasterServerClient) SendHeartbeat(snapshot model.StateSnapshot) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	_, err := m.grpcClient.SendHeartbeat(ctx, &pb.ServerStateRequest{
-		State: m.buildServerState(gameState),
+		State: m.buildServerState(snapshot),
 	})
 	if err != nil {
-		log.Println("Error Sending ServerState - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
+		log.Printf("Error Sending ServerState: %v", err)
 	}
 }
 
 // EndGame ...
-func (m *MasterServerClient) EndGame(gameState *model.GameState) {
+func (m *MasterServerClient) EndGame(snapshot model.StateSnapshot) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	_, err := m.grpcClient.EndGame(ctx, &pb.EndGameRequest{
-		State: m.buildServerState(gameState),
+		State: m.buildServerState(snapshot),
 	})
 	if err != nil {
-		log.Println("Error When Ending Game - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
+		log.Printf("Error When Ending Game: %v", err)
 	}
 }
 
-// AuthorizePlayer ...
-func (m *MasterServerClient) AuthorizePlayer(token string, player *model.Player) error {
+// AuthorizePlayer returns the global id and nickname of the player owning the token
+func (m *MasterServerClient) AuthorizePlayer(token string) (string, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 	authResp, err := m.grpcClient.AuthorizePlayer(ctx, &pb.AuthorizePlayerRequest{
 		Token: token,
 	})
 	if err != nil {
-		log.Println("Error authorizing player - %v.ListFeatures(_) = _, %v", m.grpcClient, err)
+		log.Printf("Error authorizing player: %v", err)
 		// todo wrap error
-		return err
+		return "", "", err
 	}
-	player.GlobalID = authResp.GetGlobalId()
-	player.Nickname = authResp.GetName()
 
-	return nil
+	return authResp.GetGlobalId(), authResp.GetName(), nil
 }
 
-func (m *MasterServerClient) buildServerState(gameState *model.GameState) *pb.ServerState {
-	statePlayers := gameState.GetPlayers()
+func (m *MasterServerClient) identity() (string, string) {
+	m.mutex.RLock()
+	defer m.mutex.RUnlock()
+	return m.id, m.address
+}
 
+func (m *MasterServerClient) buildServerState(snapshot model.StateSnapshot) *pb.ServerState {
 	players := []*pb.Player{}
-	for _, pd := range statePlayers {
+	for _, pd := range snapshot.Players {
 		p := &pb.Player{
 			Name:  pd.Nickname,
 			Score: int32(pd.Score),
@@ -111,12 +122,13 @@ func (m *MasterServerClient) buildServerState(gameState *model.GameState) *pb.Se
 		players = append(players, p)
 	}
 
+	id, address := m.identity()
 	return &pb.ServerState{
-		Region:      gameState.Region,
-		Id:          m.id,
-		Address:     m.address,
+		Region:      snapshot.Region,
+		Id:          id,
+		Address:     address,
 		UpdatedAt:   int32(time.Now().UTC().Unix()),
-		ElapsedTime: int32(gameState.GameTime()),
+		ElapsedTime: int32(snapshot.GameTime),
 		Players:     players,
 	}
 }

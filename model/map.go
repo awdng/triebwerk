@@ -2,7 +2,9 @@ package model
 
 import (
 	"encoding/json"
+	"math"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -916,6 +918,36 @@ func (c *Collider) getPolygon() Polygon {
 type Map struct {
 	Collider []*Collider
 	Spawns   []*Point
+	// bounding box around all colliders and spawns
+	Min *Point
+	Max *Point
+}
+
+// mapBoundsMargin is added around the bounding box of the map
+const mapBoundsMargin = 50
+
+// IsOutOfBounds checks if a point is outside of the playable area
+func (m *Map) IsOutOfBounds(p *Point) bool {
+	return p.X < m.Min.X || p.X > m.Max.X || p.Y < m.Min.Y || p.Y > m.Max.Y
+}
+
+func (m *Map) calculateBounds() {
+	m.Min = &Point{X: math.MaxFloat32, Y: math.MaxFloat32}
+	m.Max = &Point{X: -math.MaxFloat32, Y: -math.MaxFloat32}
+	points := append([]*Point{}, m.Spawns...)
+	for _, c := range m.Collider {
+		points = append(points, c.Points...)
+	}
+	for _, p := range points {
+		m.Min.X = float32(math.Min(float64(m.Min.X), float64(p.X)))
+		m.Min.Y = float32(math.Min(float64(m.Min.Y), float64(p.Y)))
+		m.Max.X = float32(math.Max(float64(m.Max.X), float64(p.X)))
+		m.Max.Y = float32(math.Max(float64(m.Max.Y), float64(p.Y)))
+	}
+	m.Min.X -= mapBoundsMargin
+	m.Min.Y -= mapBoundsMargin
+	m.Max.X += mapBoundsMargin
+	m.Max.Y += mapBoundsMargin
 }
 
 // NewMap creates a new map object
@@ -923,7 +955,7 @@ func NewMap() *Map {
 	colliders := make([]*Collider, 0)
 	json.Unmarshal([]byte(colliderConfig), &colliders)
 
-	return &Map{
+	m := &Map{
 		Spawns: []*Point{
 			&Point{
 				X: 33.92122716470902,
@@ -992,22 +1024,45 @@ func NewMap() *Map {
 		},
 		Collider: colliders,
 	}
+	m.calculateBounds()
+	return m
 }
 
-// GetRandomSpawn Point
+// spawnOccupiedRadius is the distance in which a living player blocks a spawn point
+const spawnOccupiedRadius = 4
+
+var spawnRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+var spawnRandMutex sync.Mutex
+
+// GetRandomSpawn returns a random spawn point that is not occupied by a living player.
+// If every spawn point is occupied, the one furthest away from any living player is returned.
 func (m *Map) GetRandomSpawn(players []*Player) *Point {
-	rand.Seed(time.Now().Unix())
-	index := rand.Intn(len(m.Spawns))
-	spawn := m.Spawns[index]
-	occupied := false
-	for _, p := range players {
-		if p.IsAlive() && spawn.WithinDistanceOf(4, p.Collider.Pivot) {
-			occupied = true
-			break
+	spawnRandMutex.Lock()
+	order := spawnRand.Perm(len(m.Spawns))
+	spawnRandMutex.Unlock()
+
+	var best *Point
+	bestDistance := float32(-1)
+	for _, index := range order {
+		spawn := m.Spawns[index]
+		nearest := float32(math.MaxFloat32)
+		for _, p := range players {
+			if !p.IsAlive() {
+				continue
+			}
+			dx := spawn.X - p.Collider.Pivot.X
+			dy := spawn.Y - p.Collider.Pivot.Y
+			if d := dx*dx + dy*dy; d < nearest {
+				nearest = d
+			}
+		}
+		if nearest >= spawnOccupiedRadius*spawnOccupiedRadius {
+			return spawn
+		}
+		if nearest > bestDistance {
+			best = spawn
+			bestDistance = nearest
 		}
 	}
-	if occupied { // try again
-		return m.GetRandomSpawn(players)
-	}
-	return spawn
+	return best
 }
