@@ -12,8 +12,6 @@ services:
         - panzerkampf
       ports:
         - "9090:8080"
-      volumes:
-        - ./firebase.json:/firebase.json
 
 networks:
   panzerkampf:

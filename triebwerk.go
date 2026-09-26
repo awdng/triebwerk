@@ -1,10 +1,5 @@
 package triebwerk
 
-import (
-	"cloud.google.com/go/firestore"
-	firebase "firebase.google.com/go/v4"
-)
-
 // Config from Environment Vars
 type Config struct {
 	PublicIP         string `envconfig:"PUBLIC_IP" required:"false" default:"localhost"`
@@ -12,10 +7,6 @@ type Config struct {
 	Region           string `envconfig:"REGION" required:"true" default:"EU"`
 	Port             int    `envconfig:"PORT" required:"false" default:"80"`
 	MaxPlayers       int    `envconfig:"MAX_PLAYERS" required:"false" default:"12"`
-}
-
-// Firebase ...
-type Firebase struct {
-	App   *firebase.App
-	Store *firestore.Client
+	// GameLength of a round in seconds
+	GameLength int `envconfig:"GAME_LENGTH" required:"false" default:"300"`
 }

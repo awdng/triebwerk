@@ -5,8 +5,6 @@ import (
 	"time"
 )
 
-const gameLength = 5
-
 // GameState ...
 type GameState struct {
 	Region      string
@@ -20,12 +18,12 @@ type GameState struct {
 	mutex       *sync.RWMutex
 }
 
-// NewGameState ...
-func NewGameState(region string) *GameState {
+// NewGameState creates the state of a server, a round lasts for length
+func NewGameState(region string, length time.Duration) *GameState {
 	return &GameState{
 		Region:     region,
 		inProgress: false,
-		length:     time.Minute * gameLength,
+		length:     length,
 		players:    make(map[int]*Player),
 		Map:        NewMap(),
 		mutex:      &sync.RWMutex{},

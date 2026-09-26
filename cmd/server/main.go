@@ -8,7 +8,6 @@ import (
 	"syscall"
 	"time"
 
-	firebase "firebase.google.com/go/v4"
 	"github.com/awdng/triebwerk"
 	"github.com/awdng/triebwerk/game"
 	"github.com/awdng/triebwerk/infra"
@@ -46,24 +45,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	ctx := context.Background()
-	firebaseConfig := &firebase.Config{}
-
-	app, err := firebase.NewApp(ctx, firebaseConfig)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	client, err := app.Firestore(ctx)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	firebase := &triebwerk.Firebase{
-		App:   app,
-		Store: client,
-	}
-
 	conn, err := grpc.NewClient(config.MasterServerGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		log.Fatal(err)
@@ -76,10 +57,9 @@ func main() {
 
 	log.Printf("Loading Triebwerk ...")
 
-	playerManager := game.NewPlayerManager(firebase)
 	transport := websocket.NewTransport(config.PublicIP, config.Port)
 	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
-	controller := game.NewController(config.Region, config.MaxPlayers, networkManager, playerManager, firebase, masterServer)
+	controller := game.NewController(config.Region, config.MaxPlayers, time.Duration(config.GameLength)*time.Second, networkManager, masterServer)
 	transport.RegisterNewConnHandler(controller.RegisterPlayer)
 	transport.UnregisterConnHandler(controller.UnregisterPlayer)
 

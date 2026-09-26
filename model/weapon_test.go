@@ -2,6 +2,7 @@ package model
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -10,7 +11,7 @@ import (
 // must not hide that the weapon fired during this tick.
 func TestFiredSurvivesSecondInputInSameTick(t *testing.T) {
 	m := NewMap()
-	game := NewGameState("test")
+	game := NewGameState("test", 5*time.Minute)
 	p := NewPlayer(1, 10, 10, nil)
 	players := []*Player{p}
 

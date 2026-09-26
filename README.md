@@ -13,6 +13,8 @@ make run
 Build triebwerk:
 make build-static
 
+GAME_LENGTH (seconds) sets the round length, useful for tests.
+
 Run tests:
 make test
 Run a local load test with a live view of the match:

@@ -12,22 +12,8 @@ go build -o "$work/triebwerk" ./cmd/server
 go build -o "$work/fakemaster" ./cmd/fakemaster
 go build -o "$work/loadtest" ./cmd/loadtest
 
-# the server needs Google credentials to start, it never uses them with the fake master
-openssl genrsa 2048 2>/dev/null > "$work/key.pem"
-python3 - "$work" <<'PY'
-import json, sys
-work = sys.argv[1]
-json.dump({
-    "type": "service_account", "project_id": "triebwerk-local", "private_key_id": "local",
-    "private_key": open(work + "/key.pem").read(),
-    "client_email": "local@triebwerk-local.iam.gserviceaccount.com", "client_id": "1",
-    "token_uri": "https://oauth2.googleapis.com/token",
-}, open(work + "/credentials.json", "w"))
-PY
-
 "$work/fakemaster" -addr :8081 > "$work/fakemaster.log" 2>&1 &
-GOOGLE_APPLICATION_CREDENTIALS="$work/credentials.json" FIRESTORE_EMULATOR_HOST=localhost:8999 \
-  PUBLIC_IP=localhost PORT=9090 REGION=EU MASTERSERVER_GRPC=localhost:8081 \
+PUBLIC_IP=localhost PORT=9090 REGION=EU MASTERSERVER_GRPC=localhost:8081 GAME_LENGTH="${GAME_LENGTH:-300}" \
   "$work/triebwerk" > "$work/server.log" 2>&1 &
 server=$!
 sleep 2

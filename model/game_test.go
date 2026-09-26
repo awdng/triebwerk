@@ -2,6 +2,7 @@ package model
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -9,7 +10,7 @@ import (
 // player ids are sent as a single byte, they must stay below 256 and must
 // not collide with connected players
 func TestNewPlayerIDStaysInByteRangeAndUnique(t *testing.T) {
-	g := NewGameState("test")
+	g := NewGameState("test", 5*time.Minute)
 	p1 := NewPlayer(g.GetNewPlayerID(), 0, 0, nil)
 	g.AddPlayer(p1)
 	p2 := NewPlayer(g.GetNewPlayerID(), 0, 0, nil)

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"syscall/js"
+	"time"
 
 	"github.com/awdng/triebwerk/model"
 	"github.com/awdng/triebwerk/protocol"
@@ -12,7 +13,7 @@ import (
 
 var players = make([]*model.Player, 0)
 var localPlayer *model.Player
-var gameState = model.NewGameState("local")
+var gameState = model.NewGameState("local", 5*time.Minute)
 var controls = model.Controls{}
 
 func setInput(this js.Value, args []js.Value) interface{} {

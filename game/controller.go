@@ -5,7 +5,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/awdng/triebwerk"
 	"github.com/awdng/triebwerk/model"
 )
 
@@ -17,14 +16,6 @@ const intermission = 10 * time.Second
 var numMeasurements int64
 var totalMeasurement int64
 var avgTickTime float64
-
-type serverState struct {
-	Connect   string            `firestore:"public_ip"`
-	Scores    map[string]int    `firestore:"scores"`
-	Names     map[string]string `firestore:"names"`
-	GameTime  int               `firestore:"gametime"`
-	UpdatedAt int64             `firestore:"updated_at"`
-}
 
 // events that are created outside of the game loop and processed inside of it
 type joinEvent struct {
@@ -48,9 +39,7 @@ type authEvent struct {
 type Controller struct {
 	tickStart      time.Time
 	networkManager *NetworkManager
-	playerManager  *PlayerManager
 	state          *model.GameState
-	firebase       *triebwerk.Firebase
 	masterServer   MasterServerClient
 	maxPlayers     int
 	nextStart      time.Time
@@ -72,13 +61,11 @@ type MasterServerClient interface {
 }
 
 // NewController creates a game instance
-func NewController(region string, maxPlayers int, networkManager *NetworkManager, playerManager *PlayerManager, firebase *triebwerk.Firebase, masterServer MasterServerClient) *Controller {
-	state := model.NewGameState(region)
+func NewController(region string, maxPlayers int, gameLength time.Duration, networkManager *NetworkManager, masterServer MasterServerClient) *Controller {
+	state := model.NewGameState(region, gameLength)
 	return &Controller{
 		networkManager: networkManager,
-		playerManager:  playerManager,
 		state:          state,
-		firebase:       firebase,
 		masterServer:   masterServer,
 		maxPlayers:     maxPlayers,
 		snapshot:       state.Snapshot(),
