@@ -1,5 +1,5 @@
 # Builder Image
-FROM golang:1.13beta1-alpine3.10 as builder
+FROM golang:1.27.1-alpine3.24 AS builder
 
 RUN apk update \
     && apk upgrade \
@@ -17,7 +17,7 @@ RUN chmod +x docker/docker-entrypoint.sh \
     && make build-static
 
 # Run image
-FROM alpine:3.10
+FROM alpine:3.24
 
 WORKDIR /
 
