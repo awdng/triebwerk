@@ -101,6 +101,10 @@ func getPlayerState(this js.Value, args []js.Value) interface{} {
 		player = p
 	}
 
+	if player == nil {
+		return js.ValueOf(nil)
+	}
+
 	var uint8Array = js.Global().Get("Uint8Array")
 	buf := make([]byte, 0, 24)
 	posX := make([]byte, 4)
@@ -130,17 +134,14 @@ func getPlayerState(this js.Value, args []js.Value) interface{} {
 }
 
 func getLocalPlayerPosition(this js.Value, args []js.Value) interface{} {
-	return js.ValueOf(fmt.Sprint("%f %f", localPlayer.Collider.Pivot.X, localPlayer.Collider.Pivot.Y)).String()
+	return js.ValueOf(fmt.Sprintf("%f %f", localPlayer.Collider.Pivot.X, localPlayer.Collider.Pivot.Y)).String()
 }
 
 func createLocalPlayer(this js.Value, args []js.Value) interface{} {
 	id := args[0].Int()
+	removePlayer(this, args[:1])
 	x := float32(args[1].Float())
 	y := float32(args[2].Float())
-	width := float32(args[3].Float())
-	depth := float32(args[4].Float())
-
-	fmt.Printf("%f %f %f %f \n", x, y, width, depth)
 
 	player := model.NewPlayer(id, x, y, nil)
 
@@ -151,6 +152,7 @@ func createLocalPlayer(this js.Value, args []js.Value) interface{} {
 
 func createNetworkPlayer(this js.Value, args []js.Value) interface{} {
 	id := args[0].Int()
+	removePlayer(this, args[:1])
 	x := float32(args[1].Float())
 	y := float32(args[2].Float())
 
@@ -183,7 +185,6 @@ func removePlayer(this js.Value, args []js.Value) interface{} {
 	id := args[0].Int()
 	if localPlayer != nil && localPlayer.ID == id {
 		localPlayer = nil
-		return js.ValueOf(nil)
 	}
 
 	newPlayers := make([]*model.Player, 0)

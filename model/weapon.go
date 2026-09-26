@@ -77,5 +77,6 @@ func (w *Weapon) ShootAt(posX float32, posY float32) {
 		projectile.Direction = projectile.Position.DirectionTo(w.owner.Collider.Pivot)
 		w.Projectiles = append(w.Projectiles, projectile)
 		w.ready = false
+		w.owner.Fired = true
 	}
 }

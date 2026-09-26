@@ -21,3 +21,7 @@ make loadtest (then open http://localhost:8090)
 This starts a fake master server (cmd/fakemaster), the game server and 12 simulated
 players (cmd/loadtest) that drive around and shoot with random inputs. Options can be
 passed to the script directly, e.g. ./scripts/loadtest.sh -n 12 -d 10m -reconnect 3
+
+The browser client in `../client` connects to the same server, see its README.
+The load test only needs Go, the fake master server accepts every player so
+the nickname entered in the client is used as its name.

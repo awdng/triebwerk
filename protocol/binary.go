@@ -49,11 +49,27 @@ func (b BinaryProtocol) Encode(id int, currentGameTime uint32, message *model.Ne
 	return buf
 }
 
-// Decode player inputs
+// minimum message length per message type, shorter messages are ignored
+var minMessageLength = map[uint8]int{
+	0: 2,
+	1: 13,
+	5: 6,
+}
+
+// Decode player inputs. Malformed messages are returned without a Body and
+// with MessageType 255 so that the game loop ignores them.
 func (b BinaryProtocol) Decode(data []byte) model.NetworkMessage {
 	message := model.NetworkMessage{
-		MessageType: uint8(data[1]),
+		MessageType: 255,
 	}
+	if len(data) < 2 {
+		return message
+	}
+	messageType := uint8(data[1])
+	if len(data) < minMessageLength[messageType] {
+		return message
+	}
+	message.MessageType = messageType
 
 	if decodeHandler, ok := b.decodeHandlers[message.MessageType]; ok {
 		decodeHandler(data, &message)
@@ -80,7 +96,7 @@ func encodePlayerState(message *model.NetworkMessage) []byte {
 	binary.LittleEndian.PutUint32(turretY[:], math.Float32bits(p.Collider.Turret.Y))
 	binary.LittleEndian.PutUint32(rotation[:], math.Float32bits(p.Collider.Rotation))
 	binary.LittleEndian.PutUint32(turretRotation[:], math.Float32bits(p.Collider.TurretRotation))
-	if p.Control.Shoot {
+	if p.Fired {
 		shooting = 1
 	}
 

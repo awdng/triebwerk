@@ -2,7 +2,6 @@ package model
 
 import (
 	"sync"
-	"sync/atomic"
 	"time"
 )
 
@@ -97,9 +96,23 @@ func (g *GameState) GetPlayerCount() int {
 	return g.playerCount
 }
 
-// GetNewPlayerID ...
+// maxPlayerID is the highest player id, ids are sent to clients as a single byte
+const maxPlayerID = 255
+
+// GetNewPlayerID returns the next free player id in the range 1 to 255.
+// Ids are handed out round robin so that a recently disconnected player's id
+// is not reused immediately.
 func (g *GameState) GetNewPlayerID() int {
-	return int(atomic.AddInt64(&g.playerID, 1))
+	g.mutex.Lock()
+	defer g.mutex.Unlock()
+	for i := 0; i < maxPlayerID; i++ {
+		g.playerID = g.playerID%maxPlayerID + 1
+		if _, inUse := g.players[int(g.playerID)]; !inUse {
+			return int(g.playerID)
+		}
+	}
+	// every id is in use, this can not happen with a sane MAX_PLAYERS
+	return int(g.playerID)
 }
 
 // AddPlayer to the game

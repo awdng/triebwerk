@@ -34,12 +34,15 @@ type Controls struct {
 
 // Player ...
 type Player struct {
-	ID               int
-	GlobalID         string
-	AuthToken        string
-	Nickname         string
-	Health           int
-	Score            int
+	ID        int
+	GlobalID  string
+	AuthToken string
+	Nickname  string
+	Health    int
+	Score     int
+	// Fired is true if a projectile was fired during the current server tick.
+	// Control.Shoot can not be used for this because it is overwritten by every processed input.
+	Fired            bool
 	respawnCountdown float32
 	Weapons          []*Weapon
 	Control          Controls

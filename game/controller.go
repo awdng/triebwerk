@@ -217,6 +217,8 @@ func (g *Controller) isConnected(player *model.Player) bool {
 }
 
 func (g *Controller) processInputs(p *model.Player, players []*model.Player, timestep float32) {
+	// the fired flag is reported to the clients once per tick
+	p.Fired = false
 	// read control input
 	for len(p.Client.NetworkIn) != 0 {
 		message := <-p.Client.NetworkIn
