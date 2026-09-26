@@ -8,7 +8,7 @@ import (
 	"syscall"
 	"time"
 
-	firebase "firebase.google.com/go"
+	firebase "firebase.google.com/go/v4"
 	"github.com/awdng/triebwerk"
 	"github.com/awdng/triebwerk/game"
 	"github.com/awdng/triebwerk/infra"
@@ -18,7 +18,26 @@ import (
 
 	pb "github.com/awdng/triebwerk-proto/gameserver"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/credentials/insecure"
 )
+
+// waitForConnection blocks until the master server is reachable
+func waitForConnection(conn *grpc.ClientConn) {
+	conn.Connect()
+	for {
+		state := conn.GetState()
+		if state == connectivity.Ready {
+			return
+		}
+		if state == connectivity.TransientFailure {
+			log.Printf("failed to connect to GRPC backend %s, retrying...", conn.Target())
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		conn.WaitForStateChange(ctx, state)
+		cancel()
+	}
+}
 
 func main() {
 	// load env vars into config struct
@@ -45,20 +64,11 @@ func main() {
 		Store: client,
 	}
 
-	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithBlock())
-	opts = append(opts, grpc.WithInsecure())
-	opts = append(opts, grpc.WithTimeout(5*time.Second))
-
-	var conn *grpc.ClientConn
-	for conn == nil {
-		conn, err = grpc.Dial(config.MasterServerGRPC, opts...)
-		if err != nil {
-			log.Printf("failed to connect to GRPC backend: %v", err)
-			log.Println("Retrying...")
-			time.Sleep(2 * time.Second)
-		}
+	conn, err := grpc.NewClient(config.MasterServerGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatal(err)
 	}
+	waitForConnection(conn)
 
 	defer conn.Close()
 	pbclient := pb.NewGameServerMasterClient(conn)

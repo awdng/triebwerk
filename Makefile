@@ -21,8 +21,8 @@ run: build
 	@export `cat ${mkfile_path}.env | xargs`; ./triebwerk
 
 tools: ## Install all necessary tools
-	GO111MODULE=on $(GO) get golang.org/x/tools/cmd/goimports
-	GO111MODULE=on $(GO) get -u golang.org/x/lint/golint
+	$(GO) install golang.org/x/tools/cmd/goimports@latest
+	$(GO) install golang.org/x/lint/golint@latest
 
 fmt-check: ## Check formatting (goimports)
 	@ goimports -e -d -l $(GOFILES)
@@ -32,7 +32,7 @@ fmt: ## Fix formatting (goimports)
 
 lint: ## Perform lint checks
 ifndef HAS_GOLINT
-	$(GO) get github.com/golang/lint/golint
+	$(GO) install golang.org/x/lint/golint@latest
 endif
 	golint -set_exit_status $(GOPACKAGES)
 

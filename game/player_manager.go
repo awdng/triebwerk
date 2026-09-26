@@ -47,7 +47,7 @@ func (p *PlayerManager) Authorize(player *model.Player, token string) error {
 	// user did not verify email
 	if emailVerified, ok := checkedToken.Claims["email_verified"]; ok {
 		if !emailVerified.(bool) {
-			return errors.New("User email not verified")
+			return errors.New("User email not verified")
 		}
 	}
 
