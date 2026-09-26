@@ -1,0 +1,37 @@
+.env.dist
+  s_99d036638f82ff::t_3ffcd7d93f3c3b 8
+README.md
+  s_99d036638f82ff::t_6dc53177369fe3 16-17
+cmd/server/main.go
+  s_99d036638f82ff::t_dff0ec8bb2915e 62
+cmd/wasm/tanks.go
+  s_99d036638f82ff::t_f1716ea3347c49 8,16
+game/controller.go
+  s_99d036638f82ff::t_0a26bb7429ebb9 64-65
+model/game.go
+  s_99d036638f82ff::t_63a8361e8785e8 21-22,26
+model/game_test.go
+  s_99d036638f82ff::t_15db3a91c2a96b 5,13
+model/weapon_test.go
+  s_99d036638f82ff::t_4aed53ee895ff9 5,14
+scripts/loadtest.sh
+  s_99d036638f82ff::t_f35c5cdbe97489 16
+triebwerk.go
+  s_99d036638f82ff::t_7a20f87239e4f9 10-11
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.15",
+  "base_commit_sha": "10addcad667ec9f8c1b327bb32316df99c02021a",
+  "prompts": {},
+  "sessions": {
+    "s_99d036638f82ff": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "s_99d036638f82ff",
+        "model": "unknown"
+      },
+      "human_author": "Arne Wieding <arne.wieding@deliveryhero.com>"
+    }
+  }
+}
