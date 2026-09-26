@@ -73,6 +73,14 @@ type NetworkManager struct {
 
 	// Unregister requests from clients.
 	unregister chan *model.Client
+
+	// Messages for a single client.
+	direct chan directMessage
+}
+
+type directMessage struct {
+	client *model.Client
+	data   []byte
 }
 
 // NewNetworkManager ...
@@ -84,6 +92,7 @@ func NewNetworkManager(transport Transport, protocol Protocol) *NetworkManager {
 		broadcast:  make(chan []byte),
 		register:   make(chan *model.Client),
 		unregister: make(chan *model.Client),
+		direct:     make(chan directMessage),
 		clients:    make(map[*model.Client]bool),
 	}
 }
@@ -110,25 +119,40 @@ func (n *NetworkManager) run() {
 			go n.reader(client)
 			log.Printf("NetworkManager: Client %s connected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
 		case client := <-n.unregister:
-			if _, ok := n.clients[client]; ok {
-				client.Disconnect()
-				delete(n.clients, client)
-				log.Printf("NetworkManager: Client %s disconnected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
-				n.transport.Unregister(client.Connection)
+			n.remove(client)
+		case message := <-n.direct:
+			if _, ok := n.clients[message.client]; ok {
+				n.deliver(message.client, message.data)
 			}
 		case message := <-n.broadcast:
 			for client := range n.clients {
-				// select is used to avoid blocking when a network output writer of a client is not ready
-				// client is disconnectet if network output channel buffer reaches maximum size
-				select {
-				case client.NetworkOut <- message:
-				default:
-					log.Printf("NetworkManager: Closing connection of Client %s: Could not write to NetworkOut channel, buffer size %d", client.Connection.Identifier(), len(client.NetworkOut))
-					n.unregister <- client
-				}
+				n.deliver(client, message)
 			}
 		}
 	}
+}
+
+// deliver queues data for a client without blocking.
+// The client is disconnected if its network output channel buffer reaches maximum size.
+// Must only be called from run, which owns the NetworkOut channels.
+func (n *NetworkManager) deliver(client *model.Client, data []byte) {
+	select {
+	case client.NetworkOut <- data:
+	default:
+		log.Printf("NetworkManager: Closing connection of Client %s: Could not write to NetworkOut channel, buffer size %d", client.Connection.Identifier(), len(client.NetworkOut))
+		n.remove(client)
+	}
+}
+
+// remove a client, must only be called from run
+func (n *NetworkManager) remove(client *model.Client) {
+	if _, ok := n.clients[client]; !ok {
+		return
+	}
+	client.Disconnect()
+	delete(n.clients, client)
+	log.Printf("NetworkManager: Client %s disconnected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
+	n.transport.Unregister(client.Connection)
 }
 
 // Register a new Client with the NetworkService
@@ -159,7 +183,7 @@ func (n *NetworkManager) SendTime(player *model.Player, state *model.GameState, 
 
 // Send data to a client
 func (n *NetworkManager) Send(client *model.Client, message []byte) error {
-	client.NetworkOut <- message
+	n.direct <- directMessage{client: client, data: message}
 	return nil
 }
 
@@ -262,6 +286,11 @@ func (n *NetworkManager) reader(client *model.Client) {
 			log.Printf("Reader: Closing connection of Client %s: %s", client.Connection.Identifier(), err)
 			break
 		}
-		client.NetworkIn <- n.protocol.Decode(message)
+		// never block here, a blocked reader stops answering pings and the client times out
+		select {
+		case client.NetworkIn <- n.protocol.Decode(message):
+		default:
+			log.Printf("Reader: Dropping message of Client %s: NetworkIn channel is full", client.Connection.Identifier())
+		}
 	}
 }

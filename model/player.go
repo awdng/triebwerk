@@ -229,9 +229,9 @@ type Client struct {
 }
 
 // Disconnect Client from the network
+// NetworkIn is not closed because the connection reader might still be writing to it.
 func (c *Client) Disconnect() {
 	close(c.NetworkOut)
-	close(c.NetworkIn)
 }
 
 // NetworkMessage represents an network message from or to a Client

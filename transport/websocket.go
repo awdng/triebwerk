@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/awdng/triebwerk/model"
@@ -18,6 +19,7 @@ type Transport struct {
 	upgrader   websocket.Upgrader
 	register   func(conn model.Connection)
 	unregister func(conn model.Connection)
+	mutex      sync.RWMutex
 	port       int
 	address    string
 }
@@ -39,6 +41,8 @@ func NewTransport(address string, port int) *Transport {
 
 // GetAddress ...
 func (t *Transport) GetAddress() string {
+	t.mutex.RLock()
+	defer t.mutex.RUnlock()
 	return strings.Join([]string{t.address, strconv.Itoa(t.port)}, ":")
 }
 
@@ -72,11 +76,13 @@ func (t *Transport) Init() {
 
 // Run ...
 func (t *Transport) Run() error {
+	t.mutex.Lock()
 	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", t.port))
 	if err != nil {
 		panic(err)
 	}
 	t.port = listener.Addr().(*net.TCPAddr).Port
+	t.mutex.Unlock()
 
 	log.Printf("Starting Triebwerk Websocket Server on %s...", t.GetAddress())
 	return http.Serve(listener, nil)
@@ -84,7 +90,8 @@ func (t *Transport) Run() error {
 
 // Connection represents a websocket connection
 type Connection struct {
-	conn *websocket.Conn
+	conn     *websocket.Conn
+	pongWait time.Duration
 }
 
 // NewConnection creates a new connection
@@ -114,6 +121,7 @@ func (c *Connection) Close(writeWait time.Duration, graceful bool) {
 
 // PrepareRead prepares the websocket connection for reading
 func (c *Connection) PrepareRead(maxMessageSize int64, pongWait time.Duration) {
+	c.pongWait = pongWait
 	c.conn.SetReadLimit(maxMessageSize)
 	c.conn.SetReadDeadline(time.Now().Add(pongWait))
 	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
@@ -128,6 +136,8 @@ func (c *Connection) Read() ([]byte, error) {
 		}
 		return nil, err
 	}
+	// any message proves the client is alive, not only pongs
+	c.conn.SetReadDeadline(time.Now().Add(c.pongWait))
 	return message, nil
 }
 

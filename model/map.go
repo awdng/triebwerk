@@ -2,7 +2,9 @@ package model
 
 import (
 	"encoding/json"
+	"math"
 	"math/rand"
+	"sync"
 	"time"
 )
 
@@ -994,20 +996,41 @@ func NewMap() *Map {
 	}
 }
 
-// GetRandomSpawn Point
+// spawnOccupiedRadius is the distance in which a living player blocks a spawn point
+const spawnOccupiedRadius = 4
+
+var spawnRand = rand.New(rand.NewSource(time.Now().UnixNano()))
+var spawnRandMutex sync.Mutex
+
+// GetRandomSpawn returns a random spawn point that is not occupied by a living player.
+// If every spawn point is occupied, the one furthest away from any living player is returned.
 func (m *Map) GetRandomSpawn(players []*Player) *Point {
-	rand.Seed(time.Now().Unix())
-	index := rand.Intn(len(m.Spawns))
-	spawn := m.Spawns[index]
-	occupied := false
-	for _, p := range players {
-		if p.IsAlive() && spawn.WithinDistanceOf(4, p.Collider.Pivot) {
-			occupied = true
-			break
+	spawnRandMutex.Lock()
+	order := spawnRand.Perm(len(m.Spawns))
+	spawnRandMutex.Unlock()
+
+	var best *Point
+	bestDistance := float32(-1)
+	for _, index := range order {
+		spawn := m.Spawns[index]
+		nearest := float32(math.MaxFloat32)
+		for _, p := range players {
+			if !p.IsAlive() {
+				continue
+			}
+			dx := spawn.X - p.Collider.Pivot.X
+			dy := spawn.Y - p.Collider.Pivot.Y
+			if d := dx*dx + dy*dy; d < nearest {
+				nearest = d
+			}
+		}
+		if nearest >= spawnOccupiedRadius*spawnOccupiedRadius {
+			return spawn
+		}
+		if nearest > bestDistance {
+			best = spawn
+			bestDistance = nearest
 		}
 	}
-	if occupied { // try again
-		return m.GetRandomSpawn(players)
-	}
-	return spawn
+	return best
 }

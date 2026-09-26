@@ -121,3 +121,33 @@ func (g *GameState) RemovePlayer(player *Player) int {
 	g.playerCount--
 	return g.playerCount
 }
+
+// PlayerSnapshot is a copy of the player data reported to the master server
+type PlayerSnapshot struct {
+	Nickname string
+	Score    int
+}
+
+// StateSnapshot is a copy of the game state that can be handed to other goroutines
+type StateSnapshot struct {
+	Region   string
+	GameTime uint32
+	Players  []PlayerSnapshot
+}
+
+// Snapshot copies the current game state
+func (g *GameState) Snapshot() StateSnapshot {
+	players := g.GetPlayers()
+	snapshot := StateSnapshot{
+		Region:   g.Region,
+		GameTime: g.GameTime(),
+		Players:  make([]PlayerSnapshot, 0, len(players)),
+	}
+	for _, p := range players {
+		snapshot.Players = append(snapshot.Players, PlayerSnapshot{
+			Nickname: p.Nickname,
+			Score:    p.Score,
+		})
+	}
+	return snapshot
+}
