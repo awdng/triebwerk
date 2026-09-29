@@ -10,15 +10,20 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/awdng/triebwerk/loadtest"
 	"github.com/awdng/triebwerk/model"
 	"github.com/gorilla/websocket"
 )
 
+// size of one player entry in a state broadcast, see protocol/binary.go
+const entrySize = 36
+
 // viewer relays what the simulated players see to browsers
 type viewer struct {
-	stats    *stats
-	bots     []*bot
-	upgrader websocket.Upgrader
+	stats       *loadtest.Stats
+	bots        []*loadtest.Bot
+	gamesPlayed int64
+	upgrader    websocket.Upgrader
 
 	mutex       sync.Mutex
 	browsers    map[chan []byte]bool
@@ -77,7 +82,7 @@ type mapView struct {
 	Max       *model.Point      `json:"max"`
 }
 
-func newViewer(s *stats, bots []*bot) *viewer {
+func newViewer(s *loadtest.Stats, bots []*loadtest.Bot) *viewer {
 	return &viewer{
 		stats:    s,
 		bots:     bots,
@@ -137,7 +142,7 @@ func (v *viewer) publishEvent(event string, gameTime uint32) {
 	v.haveFrame = false // game time starts at zero again
 	v.mutex.Unlock()
 	if event == "end" {
-		atomic.AddInt64(&v.stats.gamesPlayed, 1)
+		atomic.AddInt64(&v.gamesPlayed, 1)
 	}
 	v.broadcast(eventView{Type: "event", Event: event, GameTime: gameTime})
 }
@@ -164,9 +169,9 @@ func (v *viewer) publishStats() {
 		stats := statsView{
 			Type:          "stats",
 			Running:       v.running,
-			Connected:     atomic.LoadInt64(&v.stats.connected),
+			Connected:     atomic.LoadInt64(&v.stats.Connected),
 			Clients:       len(v.bots),
-			LostConns:     atomic.LoadInt64(&v.stats.lostConns),
+			LostConns:     atomic.LoadInt64(&v.stats.LostConnections),
 			UpdatesPerSec: v.frames * 2,
 			MaxGap:        int64(v.maxGap / time.Millisecond),
 		}
@@ -179,7 +184,7 @@ func (v *viewer) publishStats() {
 			for i, k := range keys {
 				pressed[i] = k == 1
 			}
-			stats.Bots = append(stats.Bots, botView{Name: b.name, PlayerID: id, Keys: pressed})
+			stats.Bots = append(stats.Bots, botView{Name: b.Name, PlayerID: id, Keys: pressed})
 		}
 		v.broadcast(stats)
 	}

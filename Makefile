@@ -24,8 +24,8 @@ tools: ## Install all necessary tools
 	$(GO) install golang.org/x/tools/cmd/goimports@latest
 	$(GO) install golang.org/x/lint/golint@latest
 
-fmt-check: ## Check formatting (goimports)
-	@ goimports -e -d -l $(GOFILES)
+fmt-check: ## Check formatting (goimports), fails if a file needs formatting
+	@ test -z "$$(goimports -l $(GOFILES))" || (goimports -d $(GOFILES); echo "run make fmt"; exit 1)
 
 fmt: ## Fix formatting (goimports)
 	@ goimports -w $(GOFILES)
@@ -39,10 +39,16 @@ endif
 vet: ## Perform vet checks
 	go vet $(GOPACKAGES)
 
-test: fmt-check vet test-unit ## Execute all checks and tests
+test: fmt-check vet test-unit ## Execute all checks and tests, includes the 12 player load test (about 40s)
 
-test-unit: ## Execute unit tests
+test-unit: ## Execute unit tests and the in-process 12 player load test
 	$(GO) test -race -v $(GOPACKAGES)
+
+test-short: ## Execute unit tests without the load test
+	$(GO) test -race -short $(GOPACKAGES)
+
+wasm: ## Build the client simulation (cmd/wasm) into the client
+	GOOS=js GOARCH=wasm $(GO) build -o ../client/public/game/tanks.wasm ./cmd/wasm
 
 integration-test: ## Execute integration tests
 	@test -f .env || (echo "File \".env\" does not exist and is needed to run integration test" && exit 1)
@@ -67,10 +73,13 @@ build-static: fmt ## Build binaries statically
 loadtest: ## Run a local load test with a live view on http://localhost:8090
 	./scripts/loadtest.sh
 
+loadtest-check: ## Run the real binaries with 12 players for one round, fail on drops, stalls or missing rounds
+	GAME_LENGTH=15 ./scripts/loadtest.sh -n 12 -d 35s -check -view ''
+
 clean: ## Cleanup runtime files
 	rm -rf triebwerk *.out
 
 clean-all: clean ## Cleanup ALL runtime files
 	rm -rf triebwerk
 
-.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit integration-test cover cover-html build build-static loadtest clean clean-all
+.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit test-short wasm integration-test cover cover-html build build-static loadtest loadtest-check clean clean-all

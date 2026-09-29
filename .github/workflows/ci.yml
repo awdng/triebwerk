@@ -1,0 +1,32 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Install goimports
+        run: go install golang.org/x/tools/cmd/goimports@latest
+
+      # formatting, vet, unit tests and the in-process 12 player load test
+      - name: Test
+        run: make test
+
+      # the client runs the server model as WebAssembly, it must keep compiling
+      - name: Build the wasm simulation
+        run: GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/wasm
+
+      # the real binaries (fake master server over gRPC, game server,
+      # 12 simulated players) through a complete round
+      - name: Load test with 12 players
+        run: make loadtest-check

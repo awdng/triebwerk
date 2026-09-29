@@ -16,7 +16,14 @@ make build-static
 GAME_LENGTH (seconds) sets the round length, useful for tests.
 
 Run tests:
-make test
+make test          (formatting, vet, race tests and a 12 player load test in process, about a minute)
+make test-short    (without the load test)
+make loadtest-check (real binaries, 12 simulated players through a round, fails on drops or stalls)
+
+The load test players live in the loadtest package, TestLoad12Players in
+game/loadtest_test.go and cmd/loadtest -check use the same checks
+(loadtest.Report.Check). CI runs all of it on every push, see
+.github/workflows/ci.yml.
 Run a local load test with a live view of the match:
 make loadtest (then open http://localhost:8090)
 
