@@ -8,8 +8,6 @@ import (
 	"github.com/awdng/triebwerk/model"
 )
 
-const tickrate = 30
-
 // time between the end of a game and the start of the next one
 const intermission = 10 * time.Second
 
@@ -209,29 +207,19 @@ func (g *Controller) isConnected(player *model.Player) bool {
 	return false
 }
 
-func (g *Controller) processInputs(p *model.Player, players []*model.Player, timestep float32) {
-	// the fired flag is reported to the clients once per tick
-	p.Fired = false
-	// read control input
+// readMessages takes what arrived from a client since the last tick. Inputs
+// are queued for their ticks, they do not move anything here.
+func (g *Controller) readMessages(p *model.Player) {
 	for len(p.Client.NetworkIn) != 0 {
 		message := <-p.Client.NetworkIn
 		switch messageType := message.MessageType; messageType {
 		case 0:
 			g.authorize(p, message.Body.(string))
 		case 1:
-			// inputs between games are discarded
-			if !g.state.InProgress() {
-				continue
-			}
-			// make sure all input gets processed
-			p.Control = message.Body.(model.Controls)
-			p.Update(players, g.state, timestep)
+			p.Inputs.Push(message.Body.(model.Controls))
 		case 5:
 			g.networkManager.SendTime(p, g.state, &message)
 		}
-	}
-	if len(p.Client.NetworkIn) > 1 {
-		log.Printf("WARNING: GameManager: Applied more than 1 input for Player %d with GlobalID %s", p.ID, p.GlobalID)
 	}
 }
 
@@ -273,10 +261,7 @@ func (g *Controller) endGame() {
 
 // gameLoop is the only goroutine that modifies the game state
 func (g *Controller) gameLoop() {
-	interval := time.Duration(int(1000/tickrate)) * time.Millisecond
-	timestep := float32(interval/time.Millisecond) / 1000
-
-	ticker := time.NewTicker(interval)
+	ticker := time.NewTicker(model.TickMillis * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
 		g.tickStart = time.Now()
@@ -287,14 +272,12 @@ func (g *Controller) gameLoop() {
 		}
 
 		players := g.state.GetPlayers()
-
-		// apply latest client inputs
 		for _, p := range players {
-			g.processInputs(p, players, timestep)
-			if g.state.InProgress() {
-				p.HandleRespawn(g.state)
-			}
+			g.readMessages(p)
 		}
+		// one step for everybody, with the input each client sent for it
+		g.state.ApplyInputs()
+		g.state.Tick()
 
 		if g.state.InProgress() {
 			// broadcast game state to clients

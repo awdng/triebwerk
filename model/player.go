@@ -46,14 +46,19 @@ type Player struct {
 	// KillLog collects the ids of the players this one destroyed until the
 	// game loop reports them with TakeKills
 	KillLog []int
-	// Fired is true if a projectile was fired during the current server tick.
-	// Control.Shoot can not be used for this because it is overwritten by every processed input.
-	Fired            bool
+	// Fired is true if a projectile was fired during the current server tick
+	Fired bool
+	// Shots counts the projectiles fired, it wraps. Clients see a shot as a
+	// change of this number, also when the tick that fired did not reach them.
+	Shots            uint8
 	respawnCountdown float32
 	Weapons          []*Weapon
-	Control          Controls
-	Collider         *RectCollider
-	Client           *Client
+	// Control holds the keys for the coming tick, see GameState.ApplyInputs
+	Control Controls
+	// Inputs are the inputs of the client that wait for their tick
+	Inputs   *InputQueue
+	Collider *RectCollider
+	Client   *Client
 }
 
 // NewPlayer creates a new player object
@@ -62,6 +67,7 @@ func NewPlayer(id int, x float32, y float32, conn Connection) *Player {
 		ID:       id,
 		Health:   100,
 		Collider: NewRectCollider(x, y, width, depth),
+		Inputs:   NewInputQueue(),
 		Client: &Client{
 			NetworkOut: make(chan []byte, 100),
 			NetworkIn:  make(chan NetworkMessage, 100),
@@ -70,18 +76,6 @@ func NewPlayer(id int, x float32, y float32, conn Connection) *Player {
 	}
 	player.Weapons = []*Weapon{NewWeapon(player)}
 	return player
-}
-
-// Update Tick for Player
-func (p *Player) Update(players []*Player, game *GameState, dt float32) {
-	m := game.Map
-	if !p.IsAlive() {
-		p.respawnCountdown += dt
-		return
-	}
-
-	p.HandleMovement(players, m, dt)
-	p.HandleWeapons(players, m, dt)
 }
 
 // HandleRespawn ...
@@ -95,18 +89,6 @@ func (p *Player) HandleRespawn(game *GameState) {
 		p.Collider.ChangePosition(spawn.X, spawn.Y)
 		p.Collider.Rotation = 0
 		p.Collider.TurretRotation = 0
-	}
-}
-
-// HandleWeapons ...
-func (p *Player) HandleWeapons(players []*Player, m *Map, dt float32) {
-	for _, w := range p.Weapons {
-		w.Update(players, m, dt)
-	}
-
-	// create new projectile
-	if p.Control.Shoot {
-		p.Weapons[0].ShootAt(p.Collider.Turret.X, p.Collider.Turret.Y)
 	}
 }
 

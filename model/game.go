@@ -1,14 +1,28 @@
 package model
 
 import (
+	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
+)
+
+// The server simulates in fixed steps. Everything that moves, moves once per
+// tick: tanks by the input their client sent for it, shells and timers by
+// themselves. Clients predict with the same step.
+const (
+	// TickMillis is the length of a tick in milliseconds
+	TickMillis = 33
+	// StepSeconds is the same in seconds, the dt of every simulation step
+	StepSeconds float32 = 0.033
 )
 
 // GameState ...
 type GameState struct {
-	Region      string
-	startTime   time.Time
+	Region string
+	// ticks since the server started, and the tick the round started at
+	tick        atomic.Uint32
+	roundStart  atomic.Uint32
 	length      time.Duration
 	inProgress  bool
 	playerID    int64
@@ -44,10 +58,13 @@ func (g *GameState) Start() {
 		p.Score = 0
 		p.Deaths = 0
 		p.KillLog = nil
+		p.respawnCountdown = 0
+		p.Inputs.Reset()
+		p.Control = Controls{}
 		spawn := g.Map.GetRandomSpawn(players)
 		p.Collider.ChangePosition(spawn.X, spawn.Y)
 	}
-	g.startTime = time.Now()
+	g.roundStart.Store(g.tick.Load())
 	g.mutex.Lock()
 	defer g.mutex.Unlock()
 	g.inProgress = true
@@ -69,12 +86,70 @@ func (g *GameState) InProgress() bool {
 
 // HasEnded ...
 func (g *GameState) HasEnded() bool {
-	return time.Now().Sub(g.startTime) >= g.length
+	return time.Duration(g.GameTime())*time.Millisecond >= g.length
 }
 
-// GameTime returns the current game time since start in milliseconds
+// GameTime is the time since the round started in milliseconds. It moves
+// with the ticks, not with the clock.
 func (g *GameState) GameTime() uint32 {
-	return uint32(time.Now().Sub(g.startTime) / time.Millisecond)
+	return (g.tick.Load() - g.roundStart.Load()) * TickMillis
+}
+
+// TickNumber counts the ticks since the server started
+func (g *GameState) TickNumber() uint32 {
+	return g.tick.Load()
+}
+
+// playersInOrder returns the players by id: the result of a tick must not
+// depend on the order of a map
+func (g *GameState) playersInOrder() []*Player {
+	players := g.GetPlayers()
+	sort.Slice(players, func(i, j int) bool { return players[i].ID < players[j].ID })
+	return players
+}
+
+// ApplyInputs gives every player the keys for the coming tick: the next
+// input of its client, or the last one again if none has arrived. Between
+// rounds inputs are thrown away.
+func (g *GameState) ApplyInputs() {
+	inProgress := g.InProgress()
+	for _, p := range g.GetPlayers() {
+		if !inProgress {
+			p.Inputs.Reset()
+			p.Control = Controls{}
+			continue
+		}
+		p.Control, _ = p.Inputs.Next()
+	}
+}
+
+// Tick advances the match by one step: every tank moves by its keys, every
+// shell flies, every destroyed tank comes closer to its return. It does not
+// matter what clients sent or whether they sent anything.
+func (g *GameState) Tick() {
+	if g.InProgress() {
+		players := g.playersInOrder()
+		for _, p := range players {
+			p.Fired = false
+			if p.IsAlive() {
+				p.HandleMovement(players, g.Map, StepSeconds)
+			} else {
+				p.respawnCountdown += StepSeconds
+			}
+		}
+		for _, p := range players {
+			for _, w := range p.Weapons {
+				w.Update(players, g.Map, StepSeconds)
+			}
+			if p.IsAlive() && p.Control.Shoot {
+				p.Weapons[0].ShootAt(p.Collider.Turret.X, p.Collider.Turret.Y)
+			}
+		}
+		for _, p := range players {
+			p.HandleRespawn(g)
+		}
+	}
+	g.tick.Add(1)
 }
 
 // GetPlayers returns the PlayerList
