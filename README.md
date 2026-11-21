@@ -12,6 +12,32 @@ make run
 The server waits until it reaches the master server at MASTER_URL (http://localhost:8081),
 locally start the fake one first: go run ./cmd/fakemaster -addr :8081
 
+The master server (its own repository, ../master):
+The master lists the game servers for the clients, has the accounts of the
+players and keeps the scores of every round. A game server talks to it over
+HTTP (infra/master_server.go): it registers under PUBLIC_IP:PORT with its
+name, map, player limit and protocol version, reports every five seconds who
+is online and the scores of its round (and once more when a round ends),
+asks who the token of a new player belongs to, registers again when the
+master has forgotten it, and says goodbye when it stops.
+MASTER_URL    address of the master, default http://localhost:8081
+SERVER_KEY    what the master asks game servers for, if it does
+SERVER_NAME   name in the list of servers, default "<REGION> <PUBLIC_IP>:<PORT>"
+A token that is a session of an account makes the player that account, any
+other token is the name of a guest. A player the master turns away is told
+why (message Denied) before the connection is closed.
+cmd/fakemaster speaks the same API, accepts every server and every player
+and keeps nothing: the tests and scripts of this repository need no master.
+`make stack` in ../master runs the real thing: master, several game servers,
+bots that play as accounts (cmd/loadtest -tokens).
+
+Watching a server:
+Every game server shows its match from above at http://<address>/spectate/
+(the live view of the load test, fed from the server's own state, package
+spectate): tanks and shots of every tick, who plays with which keys and
+score. With a SERVER_KEY it needs ?key=, which the admin pages of the master
+server hand out. Eight watchers at most; nobody watching costs nothing.
+
 Build triebwerk:
 make build-static
 
