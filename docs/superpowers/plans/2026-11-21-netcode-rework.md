@@ -146,6 +146,66 @@ Not planned in detail, each needs a playtest on the result of Phases 1 to 4 firs
 - 60 ticks per second instead of 30.
 - Delta compressed snapshots, only needed far beyond 12 players.
 
+## Results (2026-11-21)
+
+Phases 0 to 4 are implemented on the `netcode-rework` branches of both
+repositories. Measured with `npm run netcode` in `client/e2e` (two browsers on
+the Intel UHD 630 of the development machine, 8 s per scenario) and by the
+tests named.
+
+| Measure | Before | Target | Now |
+|---|---|---|---|
+| Remote tank turning, driver's clock 3 % slow: frames drawn standing still | 1.7 % | 0 | 0.0 % |
+| Same: frames more than 50 % off the right speed | 3.1 % | under 0.3 % | 0.0 % (0.2 % in one of four runs) |
+| Destroyed player whose client sends nothing is back after 3 s | never | yes | yes (`TestDestroyedPlayerReturnsWithoutInputs`) |
+| Distance covered in 1 s at 60 input messages per second | 2.0x | 1.0x | 1.0x (`TestSpeedDoesNotDependOnMessageRate`, e2e "twice as many inputs") |
+| Shell keeps flying when its owner stops sending | no | yes | yes (`TestShellsFlyWithoutInputs`) |
+| Own tank, 100 ms latency with 40 ms jitter: corrections | not comparable: the old prediction tolerated 0.1 units of error and blended the rest | 0 visible | 0 of any size |
+| 5 % packet loss, 60 ms latency: longest time a remote tank stands | not measured before | 100 ms | 0 ms, drawn 80 to 110 ms in the past |
+| How far in the past other tanks are drawn on a quiet line | 100 ms, fixed | as little as the line allows | 41 ms |
+
+The numbers are the same over WebSocket and WebTransport. The loss in these
+measurements is simulated in the client (messages are dropped before they are
+sent or after they arrived), which does not reproduce what a lost packet does
+to a TCP connection: there, everything behind it waits. What WebTransport gains
+on a line that really loses packets is therefore not measured here; that needs
+`tc netem` on the server (root) or a bad line.
+
+Not verified: WebTransport from a browser to a server with a certificate signed
+by an authority (the QA environment over `tailscale cert`). Verified instead:
+the same from a browser with a self signed certificate accepted by its hash
+(e2e), from the Go bots with a certificate from files, and a browser that falls
+back to the encrypted WebSocket when it does not trust the certificate.
+
+## Decisions taken during implementation
+
+The plan was implemented without further questions, as asked. Where it was
+silent or turned out wrong, this is what was decided, and what it costs if
+the decision was wrong.
+
+- **Order of the phases: 0, 1, 3, 2, 4.** The client's tick loop needed the acknowledged snapshots of protocol version 2. No cost.
+- **Snapshots keep float32 positions and angles.** Reconciliation compares predicted and authoritative state; quantised values would have made every comparison approximate. Cost: 19 bytes per tank instead of about 10.
+- **A connection is a player only after its hello** (was: on connect), has 30 seconds to say it and holds a place meanwhile. Cost: twelve silent sockets can hold a full server for 30 seconds; before, any twelve sockets held it for good.
+- **The hello carries the auth token to the end of the message**, without a length byte: tokens of the master server can be longer than 255 bytes.
+- **Pings are answered by the connection's reader**, not by the game loop: the round trip a client shows no longer contains up to 33 ms of waiting for a tick.
+- **Input pacing looks at the fewest inputs that waited in the last half second** (the reserve), not at the average: a client sends the ticks of a frame in one go. Cost: on a jittery line more input delay than an average would give.
+- **Late inputs that would only wait are dropped** (added after the final review): the snapshot's acknowledgement counts a bridged tick as the input that was late for it, and when more late inputs arrive than one for the coming tick and one in reserve, the older ones are dropped. Before, a burst after a long frame waited in the queue for seconds. A single late input is still applied and becomes the reserve; dropping those too was tried and made a client with a slow clock starve five times as often. Cost: after a long frame the keys of the dropped inputs are never applied.
+- **The server bridges at most ten ticks**, then the keys count as released. Cost: a line that stalls for more than a third of a second stops its tank for the others.
+- **The input queue holds eight inputs** (plan: four): at ten frames per second three arrive together and one should be in reserve.
+- **Other tanks are drawn at least 1.25 ticks in the past** (plan: never under two), one tick more when snapshots are lost. Measured: no frame without data at 41 ms on a quiet line.
+- **Everything in a frame uses the timestamp the browser gives the frame**, not the time the code runs at. Found as the cause of uneven drawing in the measurements under load.
+- **The collision boxes of other tanks are turned in the browser's copy of the simulation** (`RectCollider.SetPose`). They never were; not in the plan, found while reading the wasm bridge.
+- **The turret keys are no longer crossed** between client and server (a known server quirk), fixed in the model instead of on the wire.
+- **No network simulator on the server.** The client's simulator drives the tests. Cost: the loss it simulates does not reproduce what a lost packet does to TCP, so what WebTransport gains on a line that loses packets is not measured (see Results).
+- **Snapshots are still only sent while a round runs.** The client forgets inputs and interpolation at the end of a round.
+- **The netcode tests in the browser do not draw** (`?render=off`): two software rendering browsers next to each other reach a few frames per second, and what is measured is where tanks are, not what they look like. Gameplay and screenshot tests still draw.
+- **WebTransport with a certificate the server makes itself** (`WEBTRANSPORT_SELF_SIGNED`) keeps the WebSocket without TLS: browsers accept a certificate by its hash only for WebTransport. For development and tests.
+- **When WebTransport stops working in the middle of a match the client joins again over the WebSocket as a new player**: after two seconds without a snapshot, or when the session ends by itself. Cost: the score of the round is lost.
+- **`make qa` asks Tailscale for a certificate only with `QA_TLS=on`.** The first certificate makes the machine's tailnet name public for good; the question that was answered with yes did not say so. No certificate was requested during this work.
+- **After a pause of 0.9 seconds or more the client's tick loop runs one tick** and starts over, instead of catching up.
+- **A page that is left closes its connection** (`pagehide`), and the menu's form connects on its own only once per page load. Found when a killed browser kept its place on a full server for six seconds over WebTransport.
+- **Not built from the plan:** a log line per second for bridged ticks (the load test and the `?net` overlay report them instead); the gameplay e2e suite as a separate Playwright project per transport (it runs over WebTransport in the main run and over the WebSocket in the latency run).
+
 ## Decisions for the user
 
 1. **Order.** Fix the simulation first, transport last, as above. The measured skipping does not involve the transport; WebTransport helps on lossy links only.

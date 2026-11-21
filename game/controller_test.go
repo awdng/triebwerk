@@ -395,32 +395,36 @@ func TestSnapshotSaysWhichInputItContains(t *testing.T) {
 	moved := snapshot.Players[0]
 	assert.NotEqual(t, [2]float32{x, y}, [2]float32{moved.X, moved.Y}, "the tank drives")
 
-	// no input for this tick: the keys stay pressed, the client is told
-	s.tick()
-	snapshot = conn.snapshot()
-	assert.Equal(t, uint32(1), snapshot.Ack)
-	assert.Equal(t, uint8(protocol.WaitingStarved), snapshot.Waiting)
-	assert.NotEqual(t, [2]float32{moved.X, moved.Y}, [2]float32{snapshot.Players[0].X, snapshot.Players[0].Y}, "and drives on")
-
-	// three inputs at once: one per tick
-	conn.send(keys(4, 0, 0, 0))
+	// No input for this tick: the keys stay pressed and the tick counts as
+	// input 2. The client is told that it was a guess.
 	s.tick()
 	snapshot = conn.snapshot()
 	assert.Equal(t, uint32(2), snapshot.Ack)
-	assert.Equal(t, uint8(2), snapshot.Waiting)
+	assert.Equal(t, uint8(protocol.WaitingStarved), snapshot.Waiting)
+	assert.NotEqual(t, [2]float32{moved.X, moved.Y}, [2]float32{snapshot.Players[0].X, snapshot.Players[0].Y}, "and drives on")
+
+	// inputs 2, 3 and 4 at once: 2 comes too late for its tick, the others get one each
+	conn.send(keys(4, 0, 0, 0))
 	s.tick()
-	assert.Equal(t, uint32(3), conn.snapshot().Ack)
+	snapshot = conn.snapshot()
+	assert.Equal(t, uint32(3), snapshot.Ack)
+	assert.Equal(t, uint8(1), snapshot.Waiting)
+	s.tick()
+	assert.Equal(t, uint32(4), conn.snapshot().Ack)
 }
 
+// Every message carries the inputs before its own: a lost message loses
+// nothing. Its tick is bridged, and the input it carried becomes the reserve.
 func TestLostInputMessageLosesNothing(t *testing.T) {
 	s := newTestServer(t, 12)
 	conn, _ := s.join("anna")
 	conn.send(keys(1, protocol.BitLeft))
 	s.tick()
 	assert.Equal(t, uint32(1), conn.snapshot().Ack)
-	// the message of input 2 never arrives, input 3 brings it along
+	// the message of input 2 never arrives
 	s.tick()
 	assert.Equal(t, uint8(protocol.WaitingStarved), conn.snapshot().Waiting)
+	// input 3 brings it along
 	conn.send(keys(3, protocol.BitLeft, protocol.BitLeft, protocol.BitLeft))
 	s.tick()
 	snapshot := conn.snapshot()

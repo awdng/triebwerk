@@ -4,16 +4,18 @@
 # production build of ../client, all from the working copies on disk.
 # Ctrl-C stops everything.
 #
-# With a certificate for this machine's name in the tailnet everything is
-# served over https and the game server offers WebTransport (UDP on the game
-# port) next to its WebSocket. Tailscale hands out such certificates
+# By default the game is served over http by IP address and connects over
+# the WebSocket. With a certificate for this machine's name in the tailnet
+# everything is served over https and the game server offers WebTransport
+# (UDP on the game port) as well. Tailscale hands out such certificates
 # (`tailscale cert`) when HTTPS is enabled for the tailnet. They come from
 # Let's Encrypt, which lists every certificate in public logs: the machine's
-# tailnet name becomes public with the first one. Without a certificate the
-# game is served over http by IP address, with the WebSocket only.
+# tailnet name becomes public with the first one, for good. So that is asked
+# for, not assumed: QA_TLS=on.
 #
 # Settings (environment):
-#   QA_TLS       auto: https if Tailscale gives a certificate, off: http    auto
+#   QA_TLS       on: ask Tailscale for a certificate and serve https
+#                (see above); default: http
 #   QA_CERT, QA_KEY  certificate files to use instead of asking Tailscale;
 #                QA_HOST has to be the name they are for
 #   QA_HOST      address in the printed URLs   default: the tailnet name with
@@ -37,7 +39,7 @@ game_port=${GAME_PORT:-39090}
 view_port=${VIEW_PORT:-38090}
 master_port=${MASTER_PORT:-38081}
 bots=${BOTS:-2}
-tls=${QA_TLS:-auto}
+tls=${QA_TLS:-off}
 cert=${QA_CERT:-}
 key=${QA_KEY:-}
 host=${QA_HOST:-}
@@ -52,21 +54,30 @@ tailnet_name() {
     | sed -n '/"CertDomains"/,/\]/{/CertDomains/d;s/^ *"\([^"]*\)".*/\1/p;}' | head -n 1
 }
 
-if [ "$tls" != off ] && [ -z "$cert" ]; then
+if [ "$tls" = on ] && [ -z "$cert" ]; then
   name=$(tailnet_name)
-  if [ -n "$name" ] && { [ -z "$host" ] || [ "$host" = "$name" ]; }; then
-    mkdir -p "$work/tls"
-    chmod 700 "$work/tls"
-    echo "asking Tailscale for the certificate of $name (certificates are listed in public logs; QA_TLS=off does without)"
-    if tailscale cert --cert-file "$work/tls/$name.crt" --key-file "$work/tls/$name.key" "$name" > "$work/tailscale-cert.log" 2>&1; then
-      cert="$work/tls/$name.crt"
-      key="$work/tls/$name.key"
-      host=$name
-    else
-      echo "no certificate from Tailscale, going on without https:" >&2
-      sed 's/^/  /' "$work/tailscale-cert.log" >&2
-    fi
+  if [ -z "$name" ]; then
+    echo "QA_TLS=on, but Tailscale has no certificate name for this machine (is HTTPS enabled for the tailnet?)" >&2
+    exit 1
   fi
+  if [ -n "$host" ] && [ "$host" != "$name" ]; then
+    echo "QA_TLS=on serves under $name; QA_HOST=$host does not fit" >&2
+    exit 1
+  fi
+  mkdir -p "$work/tls"
+  chmod 700 "$work/tls"
+  echo "asking Tailscale for the certificate of $name"
+  if ! tailscale cert --cert-file "$work/tls/$name.crt" --key-file "$work/tls/$name.key" "$name" > "$work/tailscale-cert.log" 2>&1; then
+    echo "no certificate from Tailscale:" >&2
+    sed 's/^/  /' "$work/tailscale-cert.log" >&2
+    exit 1
+  fi
+  cert="$work/tls/$name.crt"
+  key="$work/tls/$name.key"
+  host=$name
+elif [ "$tls" != on ] && [ "$tls" != off ]; then
+  echo "QA_TLS is on or off, not $tls" >&2
+  exit 1
 fi
 if [ -n "$cert" ] && { [ ! -r "$cert" ] || [ ! -r "$key" ]; }; then
   echo "can not read the certificate files QA_CERT=$cert QA_KEY=$key" >&2
@@ -175,9 +186,12 @@ if [ -n "$cert" ]; then
   lets only TCP pass; &net shows which one it is.
 EOF
 else
+  hint=$(tailnet_name)
   cat <<EOF
-  Without https the game connects over the WebSocket only; WebTransport
-  needs a certificate, see the top of $0.
+  Without https the game connects over the WebSocket only. WebTransport
+  needs a certificate${hint:+: QA_TLS=on make qa asks Tailscale for one and
+  serves under $hint. That name is public from then on}, see the top of
+  $0.
 EOF
 fi
 cat <<EOF

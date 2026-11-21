@@ -24,9 +24,11 @@
 //	                    one byte of keys per input, newest first: the inputs
 //	                    before the newest ride along in case their own message
 //	                    was lost
-//	17 Snapshot    s>c  tick u32, last input applied for the receiver u32,
-//	                    inputs of the receiver that wait u8 (255: this tick
-//	                    had none), count u8, then per tank:
+//	17 Snapshot    s>c  tick u32, number of the receiver's last input that
+//	                    went into this state u32 (a tick that was bridged
+//	                    because its input was late counts as that input, see
+//	                    model.InputQueue), inputs of the receiver that wait u8
+//	                    (255: this tick had none), count u8, then per tank:
 //	                    id u8, x f32, y f32, rotation f32, turret rotation f32,
 //	                    health u8, shots fired u8 (a counter that wraps)
 //	18 Ping        c>s  client time u32

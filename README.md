@@ -21,10 +21,13 @@ How the server keeps time and talks to clients:
 The game moves in ticks of 33 ms. Every tick the server applies one input per
 player, moves every tank, shell and timer by one step and sends every player a
 snapshot. Inputs are numbered and wait in a queue for their tick; when a
-player's input is late the last one is applied again (for at most ten ticks),
-so a tank moves the same for everybody whatever its client's connection does.
-A snapshot tells its receiver which of its inputs it contains and how many
-wait, which is what clients predict and pace themselves with.
+player's input is late its tick is bridged with the keys of the last one (for
+at most ten ticks), so a tank moves the same for everybody whatever its
+client's connection does. Late inputs that would only wait behind the ticks
+that were bridged for them are dropped (the burst after a frame that took too
+long); one is kept in reserve. A snapshot tells its receiver which of its
+inputs it contains, bridged ticks included, and how many wait, which is what
+clients predict and pace themselves with.
 The wire format is described at the top of protocol/binary.go (version 2: a
 client says hello with its version and is welcomed or rejected). It has two
 lanes: a reliable one for what must arrive (hello, rounds, scoreboard, kills)
@@ -77,12 +80,13 @@ make qa
 It builds this server and the client in ../client, starts the fake master
 server, the game server, 2 simulated players and the production client build,
 and prints the URLs. Ctrl-C stops everything.
-If Tailscale gives this machine a certificate (HTTPS enabled for the tailnet),
-everything is served over https under the machine's tailnet name and the game
-connects over WebTransport, falling back to the WebSocket when UDP does not
-get through. The first certificate makes the machine's tailnet name public
-(certificates are listed in public logs); QA_TLS=off does without and serves
-http by IP address with the WebSocket only, as does a tailnet without HTTPS.
+By default it serves http by IP address and the game connects over the
+WebSocket. QA_TLS=on make qa asks Tailscale for a certificate (HTTPS has to be
+enabled for the tailnet): everything is then served over https under the
+machine's tailnet name and the game connects over WebTransport, falling back
+to the WebSocket when UDP does not get through. The first certificate makes
+the machine's tailnet name public for good (certificates are listed in public
+logs), which is why it has to be asked for.
 Ports and options are listed at the top of scripts/qa.sh.
 
 Clients get the names, kills and deaths of all players in a scoreboard message
