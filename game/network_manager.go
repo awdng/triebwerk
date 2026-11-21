@@ -33,6 +33,7 @@ type Protocol interface {
 	RoundStart(tick uint32) []byte
 	RoundEnd(tick uint32) []byte
 	Scoreboard(board *model.Scoreboard) []byte
+	Accounts(board *model.Scoreboard) []byte
 	Kill(kill model.Kill) []byte
 	Pong(clientTime uint32) []byte
 	SnapshotBody(players []*model.Player) []byte
@@ -227,9 +228,13 @@ func (n *NetworkManager) BroadcastRoundEnd(state *model.GameState) {
 	n.sendAll(state.GetPlayers(), n.protocol.RoundEnd(state.TickNumber()))
 }
 
-// BroadcastScoreboard tells every player the names, kills and deaths of all players
+// BroadcastScoreboard tells every player the names, kills and deaths of all
+// players, and right behind it who of them plays with an account
 func (n *NetworkManager) BroadcastScoreboard(state *model.GameState) {
-	n.sendAll(state.GetPlayers(), n.protocol.Scoreboard(state.Scoreboard()))
+	board := state.Scoreboard()
+	players := state.GetPlayers()
+	n.sendAll(players, n.protocol.Scoreboard(board))
+	n.sendAll(players, n.protocol.Accounts(board))
 }
 
 // BroadcastKill tells every player who destroyed whom

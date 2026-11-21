@@ -50,6 +50,7 @@ func TestBotCountsWhatHappensToItsTank(t *testing.T) {
 	b.handle(snapshotFor(105, 3, 0, tank(1, 100, 10), tank(2, 0, 0)))
 	b.handle(p.Kill(model.Kill{Killer: 1, Victim: 2}))
 	b.handle(p.Scoreboard(&model.Scoreboard{Players: []model.ScoreboardEntry{{ID: 1, Name: "a"}, {ID: 2, Name: "b"}}}))
+	b.handle(p.Accounts(&model.Scoreboard{Players: []model.ScoreboardEntry{{ID: 1, Name: "a", Account: true}, {ID: 2, Name: "b"}}}))
 	b.handle(p.Pong(5))
 	b.handle(p.RoundEnd(106))
 

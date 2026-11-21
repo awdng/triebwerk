@@ -7,7 +7,9 @@
 //	POST   /api/game/servers        this server exists, the answer is its id
 //	PUT    /api/game/servers/{id}   heartbeat: who is here, the round, its scores
 //	DELETE /api/game/servers/{id}   this server is shutting down
-//	POST   /api/game/authorize      who does this token belong to
+//	POST   /api/game/authorize      who does this token belong to: a
+//	                                ticket of the master is its account,
+//	                                anything else the name of a guest
 package infra
 
 import (
