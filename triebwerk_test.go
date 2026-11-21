@@ -1,6 +1,7 @@
 package triebwerk
 
 import (
+	"os"
 	"testing"
 
 	"github.com/kelseyhightower/envconfig"
@@ -9,8 +10,11 @@ import (
 )
 
 func TestServerThatIsToldNothingPlaysRoundsOfTenMinutesWithTwelvePlayers(t *testing.T) {
-	t.Setenv("GAME_LENGTH", "")
-	t.Setenv("MAX_PLAYERS", "")
+	// Setenv puts back what was there after the test, Unsetenv is what "told nothing" means
+	for _, name := range []string{"GAME_LENGTH", "MAX_PLAYERS"} {
+		t.Setenv(name, "")
+		os.Unsetenv(name)
+	}
 	var config Config
 	require.NoError(t, envconfig.Process("", &config))
 	assert.Equal(t, 600, config.GameLength)
