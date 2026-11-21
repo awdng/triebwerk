@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"log"
 	"math"
@@ -12,11 +11,9 @@ import (
 
 	"github.com/awdng/triebwerk/loadtest"
 	"github.com/awdng/triebwerk/model"
+	"github.com/awdng/triebwerk/protocol"
 	"github.com/gorilla/websocket"
 )
-
-// size of one player entry in a state broadcast, see protocol/binary.go
-const entrySize = 36
 
 // viewer relays what the simulated players see to browsers
 type viewer struct {
@@ -25,10 +22,14 @@ type viewer struct {
 	gamesPlayed int64
 	upgrader    websocket.Upgrader
 
-	mutex       sync.Mutex
-	browsers    map[chan []byte]bool
-	running     bool
-	haveFrame   bool
+	mutex     sync.Mutex
+	browsers  map[chan []byte]bool
+	running   bool
+	haveFrame bool
+	// tick the running round started at and tick of the last frame
+	roundStart uint32
+	// shot counters of the tanks in the last frame
+	shots       map[int]uint8
 	lastFrame   uint32
 	lastFrameAt time.Time
 	frames      int
@@ -91,55 +92,62 @@ func newViewer(s *loadtest.Stats, bots []*loadtest.Bot) *viewer {
 	}
 }
 
-func float(data []byte, offset int) float32 {
-	return math.Float32frombits(binary.LittleEndian.Uint32(data[offset:]))
-}
-
-// publishState forwards a state broadcast, every player receives the same
-// broadcast so only the first copy of each tick is forwarded
-func (v *viewer) publishState(data []byte) {
-	gameTime := binary.LittleEndian.Uint32(data[2:])
+// publishState forwards a snapshot, every player receives the same tanks
+// so only the first copy of each tick is forwarded
+func (v *viewer) publishState(snapshot protocol.SnapshotMessage) {
 	v.mutex.Lock()
-	if v.haveFrame && gameTime <= v.lastFrame {
+	if v.haveFrame && snapshot.Tick <= v.lastFrame {
 		v.mutex.Unlock()
 		return
 	}
+	gameTime := (snapshot.Tick - v.roundStart) * model.TickMillis
 	now := time.Now()
 	if v.haveFrame && now.Sub(v.lastFrameAt) > v.maxGap {
 		v.maxGap = now.Sub(v.lastFrameAt)
 	}
 	v.haveFrame = true
-	v.lastFrame = gameTime
+	v.lastFrame = snapshot.Tick
 	v.lastFrameAt = now
 	v.frames++
-	v.mutex.Unlock()
 
 	frame := frameView{Type: "frame", GameTime: gameTime, Players: []playerView{}}
-	for i := 0; i+entrySize <= len(data); i += entrySize {
-		e := data[i : i+entrySize]
+	shots := make(map[int]uint8, len(snapshot.Players))
+	for _, e := range snapshot.Players {
+		// a shot is a change of the tank's shot counter
+		last, known := v.shots[e.ID]
+		shots[e.ID] = e.Shots
+		// the end of the barrel, three units from the middle of the tank
+		sin, cos := math.Sincos(float64(e.TurretRotation))
 		frame.Players = append(frame.Players, playerView{
-			ID:       int(e[0]),
-			X:        float(e, 10),
-			Y:        float(e, 14),
-			TurretX:  float(e, 18),
-			TurretY:  float(e, 22),
-			Rotation: float(e, 26),
-			Shooting: e[34] == 1,
-			Health:   int(e[35]),
+			ID:       e.ID,
+			X:        e.X,
+			Y:        e.Y,
+			TurretX:  e.X - 3*float32(sin),
+			TurretY:  e.Y + 3*float32(cos),
+			Rotation: e.Rotation,
+			Shooting: known && last != e.Shots,
+			Health:   e.Health,
 		})
 	}
+	v.shots = shots
+	v.mutex.Unlock()
 	v.broadcast(frame)
 }
 
 // publishEvent forwards game start and end, once per game
-func (v *viewer) publishEvent(event string, gameTime uint32) {
+func (v *viewer) publishEvent(event string, tick uint32) {
 	v.mutex.Lock()
 	if (event == "start") == v.running {
 		v.mutex.Unlock()
 		return
 	}
 	v.running = event == "start"
-	v.haveFrame = false // game time starts at zero again
+	gameTime := uint32(0)
+	if v.running {
+		v.roundStart = tick
+	} else {
+		gameTime = (tick - v.roundStart) * model.TickMillis
+	}
 	v.mutex.Unlock()
 	if event == "end" {
 		atomic.AddInt64(&v.gamesPlayed, 1)

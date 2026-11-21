@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/awdng/triebwerk/loadtest"
+	"github.com/awdng/triebwerk/protocol"
 )
 
 func main() {
@@ -40,14 +41,14 @@ func main() {
 		Duration:    *duration,
 		Reconnect:   *reconnect,
 		LogInterval: 10 * time.Second,
-		OnState: func(data []byte) {
+		OnState: func(snapshot protocol.SnapshotMessage) {
 			if view != nil {
-				view.publishState(data)
+				view.publishState(snapshot)
 			}
 		},
-		OnEvent: func(event string, gameTime uint32) {
+		OnEvent: func(event string, tick uint32) {
 			if view != nil {
-				view.publishEvent(event, gameTime)
+				view.publishEvent(event, tick)
 			}
 		},
 	})

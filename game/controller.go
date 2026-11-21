@@ -11,6 +11,9 @@ import (
 // time between the end of a game and the start of the next one
 const intermission = 10 * time.Second
 
+// a connection that has not said hello after this many ticks (5 s) is closed
+const helloTimeoutTicks = 5000 / model.TickMillis
+
 var numMeasurements int64
 var totalMeasurement int64
 var avgTickTime float64
@@ -40,7 +43,10 @@ type Controller struct {
 	state          *model.GameState
 	masterServer   MasterServerClient
 	maxPlayers     int
-	nextStart      time.Time
+	// connections that have not said hello yet: they hold a place on the
+	// server but are no tanks and are not sent anything
+	waiting   []*waitingClient
+	nextStart time.Time
 	// the scoreboard is sent when it changed and once a second anyway
 	scoreboardDirty bool
 	scoreboardSent  time.Time
@@ -50,6 +56,12 @@ type Controller struct {
 
 	snapshotMutex sync.Mutex
 	snapshot      model.StateSnapshot
+}
+
+type waitingClient struct {
+	client *model.Client
+	// tick the connection arrived at
+	since uint32
 }
 
 // MasterServerClient ...
@@ -133,7 +145,7 @@ func (g *Controller) handleEvents() {
 	for _, event := range g.popEvents() {
 		switch e := event.(type) {
 		case joinEvent:
-			g.addPlayer(e.conn)
+			g.addConnection(e.conn)
 		case leaveEvent:
 			g.removePlayer(e.conn)
 		case authEvent:
@@ -142,28 +154,82 @@ func (g *Controller) handleEvents() {
 	}
 }
 
-func (g *Controller) addPlayer(conn model.Connection) {
-	if g.state.GetPlayerCount() >= g.maxPlayers {
+// addConnection takes a new connection in. It becomes a player when it
+// says hello, see greet.
+func (g *Controller) addConnection(conn model.Connection) {
+	if g.state.GetPlayerCount()+len(g.waiting) >= g.maxPlayers {
 		log.Printf("GameManager: Rejecting connection %s, server is full (%d Players)", conn.Identifier(), g.maxPlayers)
 		conn.Close(writeWait, true)
 		conn.Close(writeWait, false)
 		return
 	}
+	client := model.NewClient(conn)
+	g.networkManager.Register(client)
+	g.waiting = append(g.waiting, &waitingClient{client: client, since: g.state.TickNumber()})
+}
 
+// greet reads what the connections that are not players yet have sent. The
+// first hello decides: a client that speaks this server's version becomes a
+// player, any other is turned away. Who says nothing for too long is closed.
+func (g *Controller) greet() {
+	waiting := g.waiting[:0]
+	for _, w := range g.waiting {
+		hello, said := firstHello(w.client)
+		switch {
+		case said && hello.Version == g.networkManager.Version():
+			g.addPlayer(w.client, hello.Token)
+		case said:
+			log.Printf("GameManager: Rejecting connection %s, it speaks version %d of the protocol", w.client.Connection.Identifier(), hello.Version)
+			g.networkManager.Reject(w.client)
+		case g.state.TickNumber()-w.since > helloTimeoutTicks:
+			log.Printf("GameManager: Closing connection %s, it never said hello", w.client.Connection.Identifier())
+			g.networkManager.Disconnect(w.client)
+		default:
+			waiting = append(waiting, w)
+		}
+	}
+	for i := len(waiting); i < len(g.waiting); i++ {
+		g.waiting[i] = nil
+	}
+	g.waiting = waiting
+}
+
+// firstHello takes messages of a client until it finds a hello. Whatever
+// was sent before it is dropped, what comes after it is left for the player.
+func firstHello(client *model.Client) (model.Hello, bool) {
+	for len(client.NetworkIn) != 0 {
+		message := <-client.NetworkIn
+		if hello, ok := message.Body.(model.Hello); ok {
+			return hello, true
+		}
+	}
+	return model.Hello{}, false
+}
+
+func (g *Controller) addPlayer(client *model.Client, token string) {
 	players := g.state.GetPlayers()
 	pID := g.state.GetNewPlayerID()
 	spawn := g.state.Map.GetRandomSpawn(players)
-	player := model.NewPlayer(pID, spawn.X, spawn.Y, conn)
-	g.networkManager.Register(player, g.state)
+	player := model.NewPlayer(pID, spawn.X, spawn.Y, client.Connection)
+	player.Client = client
+	// the welcome is the first thing a player hears
+	g.networkManager.Welcome(player, g.state)
 	g.state.AddPlayer(player)
 	if g.state.InProgress() { // game already started, new Player has to know about it
-		g.networkManager.SendGameStartToClient(player.Client, g.state)
+		g.networkManager.SendRoundStart(player.Client, g.state)
 	}
+	g.authorize(player, token)
 	g.scoreboardDirty = true
 	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.GetPlayerCount())
 }
 
 func (g *Controller) removePlayer(conn model.Connection) {
+	for i, w := range g.waiting {
+		if w.client.Connection == conn {
+			g.waiting = append(g.waiting[:i], g.waiting[i+1:]...)
+			return
+		}
+	}
 	for _, p := range g.state.GetPlayers() {
 		if p.Client.Connection == conn {
 			g.state.RemovePlayer(p)
@@ -189,7 +255,8 @@ func (g *Controller) finishAuthorization(e authEvent) {
 	}
 	if e.err != nil {
 		log.Printf("GameManager: Player %d (%s) could not be authorized, forcing disconnect: %s", p.ID, p.GlobalID, e.err)
-		g.networkManager.ForceDisconnect(p)
+		p.Client.Connection.Close(writeWait, false)
+		g.networkManager.Disconnect(p.Client)
 		return
 	}
 	p.GlobalID = e.globalID
@@ -207,18 +274,15 @@ func (g *Controller) isConnected(player *model.Player) bool {
 	return false
 }
 
-// readMessages takes what arrived from a client since the last tick. Inputs
+// readMessages takes what arrived from a player since the last tick. Inputs
 // are queued for their ticks, they do not move anything here.
 func (g *Controller) readMessages(p *model.Player) {
 	for len(p.Client.NetworkIn) != 0 {
 		message := <-p.Client.NetworkIn
-		switch messageType := message.MessageType; messageType {
-		case 0:
-			g.authorize(p, message.Body.(string))
-		case 1:
-			p.Inputs.Push(message.Body.(model.Controls))
-		case 5:
-			g.networkManager.SendTime(p, g.state, &message)
+		if inputs, ok := message.Body.([]model.Controls); ok {
+			for _, input := range inputs {
+				p.Inputs.Push(input)
+			}
 		}
 	}
 }
@@ -247,16 +311,16 @@ func (g *Controller) sendScoreboard() {
 func (g *Controller) startGame() {
 	g.state.Start()
 	g.scoreboardDirty = true
-	g.networkManager.BroadcastGameStart(g.state)
+	g.networkManager.BroadcastRoundStart(g.state)
 	log.Printf("GameManager: Game has started")
 }
 
 func (g *Controller) endGame() {
 	g.state.End()
 	log.Printf("GameManager: Game has ended")
-	g.networkManager.BroadcastGameEnd(g.state)
+	g.networkManager.BroadcastRoundEnd(g.state)
 	go g.masterServer.EndGame(g.state.Snapshot())
-	g.nextStart = time.Now().Add(intermission)
+	g.nextStart = g.tickStart.Add(intermission)
 }
 
 // gameLoop is the only goroutine that modifies the game state
@@ -264,39 +328,46 @@ func (g *Controller) gameLoop() {
 	ticker := time.NewTicker(model.TickMillis * time.Millisecond)
 	defer ticker.Stop()
 	for range ticker.C {
-		g.tickStart = time.Now()
-		g.handleEvents()
-
-		if !g.state.InProgress() && g.state.ReadyToStart() && !g.tickStart.Before(g.nextStart) {
-			g.startGame()
-		}
-
-		players := g.state.GetPlayers()
-		for _, p := range players {
-			g.readMessages(p)
-		}
-		// one step for everybody, with the input each client sent for it
-		g.state.ApplyInputs()
-		g.state.Tick()
-
-		if g.state.InProgress() {
-			// broadcast game state to clients
-			g.networkManager.BroadcastGameState(g.state)
-			g.reportKills(players)
-			g.sendScoreboard()
-
-			if g.state.HasEnded() {
-				g.endGame()
-			}
-		}
-
-		g.snapshotMutex.Lock()
-		g.snapshot = g.state.Snapshot()
-		g.snapshotMutex.Unlock()
+		start := time.Now()
+		g.tick(start)
 
 		// measure average tick time
 		numMeasurements++
-		totalMeasurement += time.Now().UTC().UnixNano() - g.tickStart.UTC().UnixNano()
+		totalMeasurement += time.Now().UTC().UnixNano() - start.UTC().UnixNano()
 		avgTickTime = float64(totalMeasurement/numMeasurements) / 1000 / 1000
 	}
+}
+
+// tick is one step of the server: take in who came, went and what was sent,
+// move the world by one step and tell every player what it looks like now
+func (g *Controller) tick(now time.Time) {
+	g.tickStart = now
+	g.handleEvents()
+	g.greet()
+
+	if !g.state.InProgress() && g.state.ReadyToStart() && !g.tickStart.Before(g.nextStart) {
+		g.startGame()
+	}
+
+	players := g.state.GetPlayers()
+	for _, p := range players {
+		g.readMessages(p)
+	}
+	// one step for everybody, with the input each client sent for it
+	g.state.ApplyInputs()
+	g.state.Tick()
+
+	if g.state.InProgress() {
+		g.networkManager.SendSnapshots(g.state)
+		g.reportKills(players)
+		g.sendScoreboard()
+
+		if g.state.HasEnded() {
+			g.endGame()
+		}
+	}
+
+	g.snapshotMutex.Lock()
+	g.snapshot = g.state.Snapshot()
+	g.snapshotMutex.Unlock()
 }

@@ -7,6 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/awdng/triebwerk/protocol"
 )
 
 // Config of a load test run
@@ -22,9 +24,10 @@ type Config struct {
 	// players join at a random time within this window, default 3s
 	Stagger time.Duration
 
-	// optional hooks, called from the bot goroutines
-	OnState func(data []byte)
-	OnEvent func(event string, gameTime uint32)
+	// optional hooks, called from the bot goroutines: every snapshot a bot
+	// receives, and "start" and "end" of rounds with the tick they happened at
+	OnState func(snapshot protocol.SnapshotMessage)
+	OnEvent func(event string, tick uint32)
 	// progress output, default log.Printf, set to a no-op to silence
 	Logf func(format string, args ...interface{})
 	// how often progress is logged, 0 disables it

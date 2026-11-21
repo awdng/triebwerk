@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"encoding/binary"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -11,79 +12,224 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// The layouts in this file are mirrored in the client, src/game/net/protocol.js
+
+func TestLanes(t *testing.T) {
+	for _, reliable := range []byte{Hello, Welcome, Reject, RoundStart, RoundEnd, Scoreboard, Kill} {
+		assert.True(t, IsReliable(reliable), "type %d", reliable)
+	}
+	for _, unreliable := range []byte{Input, Snapshot, Ping, Pong} {
+		assert.False(t, IsReliable(unreliable), "type %d", unreliable)
+	}
+}
+
+// ---- what clients send ------------------------------------------------------
+
+// the token is everything after the version: the master server's tokens
+// are longer than a length byte could say
+func TestDecodeHello(t *testing.T) {
+	p := NewBinaryProtocol()
+	message := p.Decode([]byte{Hello, 2, 'J', 0xc3, 0xa4, 'g', 'e'})
+	assert.Equal(t, uint8(Hello), message.MessageType)
+	assert.Equal(t, model.Hello{Version: 2, Token: "Jäge"}, message.Body)
+
+	long := strings.Repeat("t", 900)
+	assert.Equal(t, model.Hello{Version: 2, Token: long}, p.Decode(append([]byte{Hello, 2}, long...)).Body)
+	// no token at all, and a version this server does not speak: the game decides
+	assert.Equal(t, model.Hello{Version: 7, Token: ""}, p.Decode([]byte{Hello, 7}).Body)
+	// what is not text is not passed on
+	assert.Equal(t, model.Hello{Version: 2, Token: "A"}, p.Decode([]byte{Hello, 2, 0xff, 0xfe, 'A'}).Body)
+}
+
+func TestDecodeInput(t *testing.T) {
+	p := NewBinaryProtocol()
+	// input 300 and the two before it: forward+right+shoot, forward, nothing
+	message := p.Decode([]byte{Input, 0x2c, 0x01, 0, 0, 3, 1 | 8 | 64, 1, 0})
+	assert.Equal(t, uint8(Input), message.MessageType)
+	inputs := message.Body.([]model.Controls)
+	assert.Equal(t, []model.Controls{
+		{Sequence: 300, Forward: true, Right: true, Shoot: true},
+		{Sequence: 299, Forward: true},
+		{Sequence: 298},
+	}, inputs)
+
+	all := p.Decode([]byte{Input, 1, 0, 0, 0, 1, 127}).Body.([]model.Controls)
+	assert.Equal(t, []model.Controls{{Sequence: 1, Forward: true, Backward: true, Left: true, Right: true, TurretLeft: true, TurretRight: true, Shoot: true}}, all)
+}
+
+func TestDecodeInputNeverCountsBelowOne(t *testing.T) {
+	p := NewBinaryProtocol()
+	// input 2 with two older ones: there is no input 0
+	inputs := p.Decode([]byte{Input, 2, 0, 0, 0, 3, 1, 1, 1}).Body.([]model.Controls)
+	assert.Len(t, inputs, 2)
+	assert.Equal(t, uint32(1), inputs[1].Sequence)
+}
+
+func TestDecodePing(t *testing.T) {
+	p := NewBinaryProtocol()
+	message := p.Decode([]byte{Ping, 0x78, 0x56, 0x34, 0x12})
+	assert.Equal(t, uint8(Ping), message.MessageType)
+	assert.Equal(t, model.Ping{ClientTime: 0x12345678}, message.Body)
+}
+
 // malformed client messages must never crash the server
 func TestDecodeMalformedMessagesDoNotPanic(t *testing.T) {
 	p := NewBinaryProtocol()
 	inputs := [][]byte{
 		{},
-		{0},
-		{0, 1},
-		{0, 1, 1, 1, 1, 1, 1, 1, 1},
-		{0, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0},
-		{0, 5},
-		{0, 5, 1, 2},
-		{0, 0},
-		{0, 99},
+		{Hello},
+		{Input},
+		{Input, 1, 0, 0},
+		{Input, 1, 0, 0, 0},
+		{Input, 1, 0, 0, 0, 0},
+		{Input, 1, 0, 0, 0, 3, 1},
+		{Input, 1, 0, 0, 0, 200, 1, 1, 1},
+		{Ping},
+		{Ping, 1, 2},
+		{0, 0, 'o', 'l', 'd'},
+		{Snapshot, 1, 2, 3},
+		{99, 1, 2, 3},
 	}
 	for _, data := range inputs {
 		assert.NotPanics(t, func() { p.Decode(data) }, "input %v", data)
 	}
-	assert.Nil(t, p.Decode([]byte{0, 1, 1}).Body)
-	assert.Nil(t, p.Decode([]byte{0, 5}).Body)
-	assert.Nil(t, p.Decode([]byte{}).Body)
+	for _, data := range [][]byte{{}, {Input, 1, 0, 0}, {Input, 1, 0, 0, 0, 0}, {Ping, 1}, {99, 1, 2, 3}, {0, 0, 'o', 'l', 'd'}} {
+		message := p.Decode(data)
+		assert.Equal(t, uint8(Malformed), message.MessageType, "input %v", data)
+		assert.Nil(t, message.Body, "input %v", data)
+	}
+	// more inputs announced than sent or allowed: the ones that are there count
+	assert.Len(t, p.Decode([]byte{Input, 9, 0, 0, 0, 3, 1}).Body, 1)
+	assert.Len(t, p.Decode([]byte{Input, 9, 0, 0, 0, 200, 1, 1, 1, 1, 1, 1}).Body, MaxInputsPerMessage)
 }
 
-func TestDecodePlayerInput(t *testing.T) {
+// ---- what the server sends --------------------------------------------------
+
+func TestEncodeWelcome(t *testing.T) {
 	p := NewBinaryProtocol()
-	message := p.Decode([]byte{0, 1, 1, 0, 0, 1, 0, 1, 1, 0, 0, 1, 2})
-	controls := message.Body.(model.Controls)
-	assert.True(t, controls.Forward)
-	assert.False(t, controls.Backward)
-	assert.True(t, controls.Right)
-	assert.True(t, controls.TurretLeft)
-	assert.True(t, controls.Shoot)
-	assert.Equal(t, uint32(258), controls.Sequence)
+	data := p.Welcome(7, 1000, 300*time.Second)
+	assert.Equal(t, []byte{Welcome, Version, 7, model.TickMillis}, data[:4])
+	assert.Equal(t, uint32(300000), binary.LittleEndian.Uint32(data[4:8]))
+	assert.Equal(t, uint32(1000), binary.LittleEndian.Uint32(data[8:12]))
+	assert.Len(t, data, 12)
 }
 
-func TestEncodePlayerStateUsesFiredFlag(t *testing.T) {
+func TestEncodeSmallMessages(t *testing.T) {
 	p := NewBinaryProtocol()
-	player := model.NewPlayer(3, 1, 2, nil)
-	player.Control.Shoot = false
-	player.Fired = true
-	data := p.Encode(player.ID, 1000, &model.NetworkMessage{MessageType: 1, Body: player})
-	assert.Len(t, data, 36)
-	assert.Equal(t, byte(3), data[0])
-	assert.Equal(t, byte(1), data[34], "shooting byte must reflect the fired flag")
-	assert.Equal(t, byte(100), data[35])
+	assert.Equal(t, []byte{Reject, Version}, p.Reject())
+	assert.Equal(t, []byte{RoundStart, 0xe8, 0x03, 0, 0}, p.RoundStart(1000))
+	assert.Equal(t, []byte{RoundEnd, 0xe9, 0x03, 0, 0}, p.RoundEnd(1001))
+	assert.Equal(t, []byte{Kill, 4, 9}, p.Kill(model.Kill{Killer: 4, Victim: 9}))
+	assert.Equal(t, []byte{Pong, 0x78, 0x56, 0x34, 0x12}, p.Pong(0x12345678))
 }
 
-func scoreboardMessage(players ...model.ScoreboardEntry) *model.NetworkMessage {
-	return &model.NetworkMessage{MessageType: 8, Body: &model.Scoreboard{RoundLength: 300 * time.Second, Players: players}}
+func player(id int, x, y, rotation, turret float32, health int, shots uint8) *model.Player {
+	p := model.NewPlayer(id, x, y, nil)
+	p.Collider.Rotation = rotation
+	p.Collider.TurretRotation = turret
+	p.Health = health
+	p.Shots = shots
+	return p
 }
 
-// The layout is mirrored in the client, src/game/net/protocol.js
+func TestEncodeSnapshot(t *testing.T) {
+	p := NewBinaryProtocol()
+	body := p.SnapshotBody([]*model.Player{
+		player(3, 1.5, -2.25, 0.5, 1.25, 75, 4),
+		player(12, 100, 200, -3, 3, 0, 255),
+	})
+	data := p.Snapshot(70000, 300, 2, body)
+
+	assert.Equal(t, byte(Snapshot), data[0])
+	assert.Equal(t, uint32(70000), binary.LittleEndian.Uint32(data[1:5]), "tick")
+	assert.Equal(t, uint32(300), binary.LittleEndian.Uint32(data[5:9]), "last input applied for the receiver")
+	assert.Equal(t, byte(2), data[9], "inputs of the receiver that wait")
+	assert.Equal(t, byte(2), data[10], "tanks")
+	assert.Len(t, data, 11+2*SnapshotEntrySize)
+
+	float := func(offset int) float32 { return math.Float32frombits(binary.LittleEndian.Uint32(data[offset:])) }
+	first := 11
+	assert.Equal(t, byte(3), data[first])
+	assert.Equal(t, float32(1.5), float(first+1))
+	assert.Equal(t, float32(-2.25), float(first+5))
+	assert.Equal(t, float32(0.5), float(first+9))
+	assert.Equal(t, float32(1.25), float(first+13))
+	assert.Equal(t, byte(75), data[first+17])
+	assert.Equal(t, byte(4), data[first+18])
+	second := first + SnapshotEntrySize
+	assert.Equal(t, byte(12), data[second])
+	assert.Equal(t, byte(0), data[second+17])
+	assert.Equal(t, byte(255), data[second+18])
+
+	// the same body goes to every client, each with its own header
+	other := p.Snapshot(70000, 9, WaitingStarved, body)
+	assert.Equal(t, data[10:], other[10:])
+	assert.Equal(t, byte(255), other[9])
+}
+
+func TestDecodeSnapshotReadsWhatWasEncoded(t *testing.T) {
+	p := NewBinaryProtocol()
+	body := p.SnapshotBody([]*model.Player{player(3, 1.5, -2.25, 0.5, 1.25, 75, 4), player(12, 100, 200, -3, 3, 0, 255)})
+	snapshot, ok := DecodeSnapshot(p.Snapshot(70000, 300, 2, body))
+	assert.True(t, ok)
+	assert.Equal(t, SnapshotMessage{Tick: 70000, Ack: 300, Waiting: 2, Players: []SnapshotEntry{
+		{ID: 3, X: 1.5, Y: -2.25, Rotation: 0.5, TurretRotation: 1.25, Health: 75, Shots: 4},
+		{ID: 12, X: 100, Y: 200, Rotation: -3, TurretRotation: 3, Health: 0, Shots: 255},
+	}}, snapshot)
+
+	data := p.Snapshot(1, 1, 0, body)
+	_, ok = DecodeSnapshot(data[:len(data)-1])
+	assert.False(t, ok, "cut off")
+	_, ok = DecodeSnapshot(append(append([]byte{}, data...), 0))
+	assert.False(t, ok, "bytes left over")
+	_, ok = DecodeSnapshot([]byte{Snapshot, 1})
+	assert.False(t, ok)
+	empty, ok := DecodeSnapshot(p.Snapshot(5, 0, 0, p.SnapshotBody(nil)))
+	assert.True(t, ok)
+	assert.Empty(t, empty.Players)
+}
+
+func TestSnapshotStaysInOneDatagram(t *testing.T) {
+	p := NewBinaryProtocol()
+	players := make([]*model.Player, 300)
+	for i := range players {
+		players[i] = player(i, 0, 0, 0, 0, 100, 0)
+	}
+	data := p.Snapshot(1, 1, 0, p.SnapshotBody(players))
+	// a QUIC datagram carries about 1200 bytes
+	assert.LessOrEqual(t, len(data), 1200)
+	snapshot, ok := DecodeSnapshot(data)
+	assert.True(t, ok)
+	assert.Equal(t, MaxSnapshotPlayers, len(snapshot.Players))
+
+	twelve := p.Snapshot(1, 1, 0, p.SnapshotBody(players[:12]))
+	assert.Equal(t, 11+12*19, len(twelve))
+}
+
+func scoreboardMessage(players ...model.ScoreboardEntry) *model.Scoreboard {
+	return &model.Scoreboard{RoundLength: 300 * time.Second, Players: players}
+}
+
 func TestEncodeScoreboard(t *testing.T) {
 	p := NewBinaryProtocol()
-	data := p.Encode(0, 1234, scoreboardMessage(
+	data := p.Scoreboard(scoreboardMessage(
 		model.ScoreboardEntry{ID: 3, Kills: 7, Deaths: 2, Name: "kayoone"},
 		model.ScoreboardEntry{ID: 12, Kills: 300, Deaths: 0, Name: "Jäger"},
 	))
-	// header: player id 0, type 8, game time little endian
-	assert.Equal(t, []byte{0, 8, 0xd2, 0x04, 0, 0}, data[:6])
-	assert.Equal(t, uint32(300000), binary.LittleEndian.Uint32(data[6:10]))
-	assert.Equal(t, byte(2), data[10])
+	assert.Equal(t, byte(Scoreboard), data[0])
+	assert.Equal(t, uint32(300000), binary.LittleEndian.Uint32(data[1:5]))
+	assert.Equal(t, byte(2), data[5])
 	// id, kills, deaths, length of the name, name
-	assert.Equal(t, []byte{3, 7, 0, 2, 0, 7}, data[11:17])
-	assert.Equal(t, "kayoone", string(data[17:24]))
-	assert.Equal(t, []byte{12, 0x2c, 0x01, 0, 0, 6}, data[24:30])
-	assert.Equal(t, "Jäger", string(data[30:36]))
-	assert.Len(t, data, 36)
+	assert.Equal(t, []byte{3, 7, 0, 2, 0, 7}, data[6:12])
+	assert.Equal(t, "kayoone", string(data[12:19]))
+	assert.Equal(t, []byte{12, 0x2c, 0x01, 0, 0, 6}, data[19:25])
+	assert.Equal(t, "Jäger", string(data[25:31]))
+	assert.Len(t, data, 31)
 }
 
 func TestEncodeScoreboardWithoutPlayers(t *testing.T) {
 	p := NewBinaryProtocol()
-	data := p.Encode(0, 0, scoreboardMessage())
-	assert.Equal(t, []byte{0, 8, 0, 0, 0, 0, 0xe0, 0x93, 0x04, 0, 0}, data)
+	assert.Equal(t, []byte{Scoreboard, 0xe0, 0x93, 0x04, 0, 0}, p.Scoreboard(scoreboardMessage()))
 }
 
 // names are what players typed: too long, cut in the middle of a character, not text at all
@@ -99,9 +245,9 @@ func TestEncodeScoreboardCutsNamesToValidText(t *testing.T) {
 		strings.Repeat("🎯", 7):        strings.Repeat("🎯", 6),
 	}
 	for name, want := range names {
-		data := p.Encode(0, 0, scoreboardMessage(model.ScoreboardEntry{ID: 1, Name: name}))
-		length := int(data[16])
-		got := string(data[17:])
+		data := p.Scoreboard(scoreboardMessage(model.ScoreboardEntry{ID: 1, Name: name}))
+		length := int(data[11])
+		got := string(data[12:])
 		assert.Equal(t, want, got, "name %q", name)
 		assert.Equal(t, len(want), length, "name %q", name)
 		assert.LessOrEqual(t, length, 24)
@@ -115,16 +261,49 @@ func TestEncodeScoreboardStaysInItsFields(t *testing.T) {
 	for i := range players {
 		players[i] = model.ScoreboardEntry{ID: i, Kills: 70000, Deaths: -1}
 	}
-	data := p.Encode(0, 0, scoreboardMessage(players...))
+	data := p.Scoreboard(scoreboardMessage(players...))
 	// the count is one byte
-	assert.Equal(t, byte(255), data[10])
-	assert.Len(t, data, 11+255*6)
+	assert.Equal(t, byte(255), data[5])
+	assert.Len(t, data, 6+255*6)
 	// kills and deaths are two bytes each and never wrap
-	assert.Equal(t, []byte{0xff, 0xff, 0, 0}, data[12:16])
+	assert.Equal(t, []byte{0xff, 0xff, 0, 0}, data[7:11])
 }
 
-func TestEncodeKill(t *testing.T) {
+func TestDecodeScoreboardReadsWhatWasEncoded(t *testing.T) {
 	p := NewBinaryProtocol()
-	data := p.Encode(0, 77, &model.NetworkMessage{MessageType: 9, Body: model.Kill{Killer: 4, Victim: 9}})
-	assert.Equal(t, []byte{0, 9, 77, 0, 0, 0, 4, 9}, data)
+	data := p.Scoreboard(scoreboardMessage(
+		model.ScoreboardEntry{ID: 3, Kills: 7, Deaths: 2, Name: "kayoone"},
+		model.ScoreboardEntry{ID: 12, Kills: 300, Deaths: 0, Name: "Jäger"},
+	))
+	board, ok := DecodeScoreboard(data)
+	assert.True(t, ok)
+	assert.Equal(t, 300*time.Second, board.RoundLength)
+	assert.Equal(t, []model.ScoreboardEntry{{ID: 3, Kills: 7, Deaths: 2, Name: "kayoone"}, {ID: 12, Kills: 300, Deaths: 0, Name: "Jäger"}}, board.Players)
+
+	// strict: every byte is accounted for and names are text
+	_, ok = DecodeScoreboard(data[:len(data)-1])
+	assert.False(t, ok, "cut off")
+	_, ok = DecodeScoreboard(append(append([]byte{}, data...), 0))
+	assert.False(t, ok, "bytes left over")
+	broken := append([]byte{}, data...)
+	broken[12] = 0xff
+	_, ok = DecodeScoreboard(broken)
+	assert.False(t, ok, "a name that is not utf8")
+	_, ok = DecodeScoreboard([]byte{Scoreboard, 1, 2})
+	assert.False(t, ok)
+}
+
+// ---- what a client of this package sends (bots, tests) -----------------------
+
+func TestClientMessagesAreUnderstoodByTheServer(t *testing.T) {
+	p := NewBinaryProtocol()
+	assert.Equal(t, model.Hello{Version: Version, Token: "load-01"}, p.Decode(EncodeHello("load-01")).Body)
+	assert.Equal(t, model.Ping{ClientTime: 77}, p.Decode(EncodePing(77)).Body)
+
+	inputs := p.Decode(EncodeInput(10, []byte{BitForward | BitShoot, BitBackward, 0})).Body.([]model.Controls)
+	assert.Equal(t, []model.Controls{
+		{Sequence: 10, Forward: true, Shoot: true},
+		{Sequence: 9, Backward: true},
+		{Sequence: 8},
+	}, inputs)
 }

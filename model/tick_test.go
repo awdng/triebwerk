@@ -97,6 +97,26 @@ func TestSpeedDoesNotDependOnMessageRate(t *testing.T) {
 	assert.Equal(t, normal, distance(40), "a flood of messages")
 }
 
+func TestPlayerKnowsHowItsInputsArrive(t *testing.T) {
+	p := NewPlayer(1, -128, 28, nil)
+	game := runningGame(p)
+	step := func() uint8 {
+		game.ApplyInputs()
+		game.Tick()
+		return p.InputsWaiting()
+	}
+	assert.Equal(t, uint8(WaitingStarved), step(), "nothing arrived")
+	p.Inputs.Push(Controls{Sequence: 1})
+	assert.Equal(t, uint8(0), step(), "just in time")
+	p.Inputs.Push(Controls{Sequence: 2})
+	p.Inputs.Push(Controls{Sequence: 3})
+	p.Inputs.Push(Controls{Sequence: 4})
+	assert.Equal(t, uint8(2), step(), "two wait for the next ticks")
+	assert.Equal(t, uint8(1), step())
+	assert.Equal(t, uint8(0), step())
+	assert.Equal(t, uint8(WaitingStarved), step())
+}
+
 // a client whose inputs arrive late does not stand still for others
 func TestTankKeepsDrivingThroughATickWithoutInput(t *testing.T) {
 	p := NewPlayer(1, -128, 28, nil)

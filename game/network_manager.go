@@ -21,26 +21,19 @@ const (
 	maxMessageSize = 1024
 )
 
-// MessageType ...
-type MessageType uint8
-
-const (
-	spawn MessageType = iota
-	position
-	register
-	projectile
-	hit
-	serverTime
-	gameStart
-	gameEnd
-	scoreboard
-	kill
-)
-
-// Protocol that encodes/decodes data for network transfer
+// Protocol is the wire format, see package protocol
 type Protocol interface {
-	Encode(id int, currentGameTime uint32, message *model.NetworkMessage) []byte
+	Version() uint8
 	Decode(data []byte) model.NetworkMessage
+	Welcome(id int, tick uint32, roundLength time.Duration) []byte
+	Reject() []byte
+	RoundStart(tick uint32) []byte
+	RoundEnd(tick uint32) []byte
+	Scoreboard(board *model.Scoreboard) []byte
+	Kill(kill model.Kill) []byte
+	Pong(clientTime uint32) []byte
+	SnapshotBody(players []*model.Player) []byte
+	Snapshot(tick uint32, ack uint32, waiting uint8, body []byte) []byte
 }
 
 // Transport represents the network context
@@ -53,8 +46,8 @@ type Transport interface {
 	Unregister(conn model.Connection)
 }
 
-// NetworkManager maintains the set of active clients and broadcasts messages to the
-// clients.
+// NetworkManager owns the connections: it reads what clients send, hands it
+// to the game loop and writes what the game sends to them.
 type NetworkManager struct {
 	Ready bool
 
@@ -67,20 +60,17 @@ type NetworkManager struct {
 	// Registered clients.
 	clients map[*model.Client]bool
 
-	// Inbound messages from the clients.
-	broadcast chan []byte
-
 	// Register requests from the clients.
 	register chan *model.Client
 
 	// Unregister requests from clients.
 	unregister chan *model.Client
 
-	// Messages for a single client.
-	direct chan directMessage
+	// Messages for clients, a batch is delivered in one go.
+	outgoing chan []delivery
 }
 
-type directMessage struct {
+type delivery struct {
 	client *model.Client
 	data   []byte
 }
@@ -91,10 +81,9 @@ func NewNetworkManager(transport Transport, protocol Protocol) *NetworkManager {
 		Ready:      false,
 		transport:  transport,
 		protocol:   protocol,
-		broadcast:  make(chan []byte),
 		register:   make(chan *model.Client),
 		unregister: make(chan *model.Client),
-		direct:     make(chan directMessage),
+		outgoing:   make(chan []delivery),
 		clients:    make(map[*model.Client]bool),
 	}
 }
@@ -122,13 +111,11 @@ func (n *NetworkManager) run() {
 			log.Printf("NetworkManager: Client %s connected, %d connected clients ", client.Connection.Identifier(), len(n.clients))
 		case client := <-n.unregister:
 			n.remove(client)
-		case message := <-n.direct:
-			if _, ok := n.clients[message.client]; ok {
-				n.deliver(message.client, message.data)
-			}
-		case message := <-n.broadcast:
-			for client := range n.clients {
-				n.deliver(client, message)
+		case batch := <-n.outgoing:
+			for _, message := range batch {
+				if _, ok := n.clients[message.client]; ok {
+					n.deliver(message.client, message.data)
+				}
 			}
 		}
 	}
@@ -157,100 +144,88 @@ func (n *NetworkManager) remove(client *model.Client) {
 	n.transport.Unregister(client.Connection)
 }
 
-// Register a new Client with the NetworkService
-func (n *NetworkManager) Register(player *model.Player, state *model.GameState) {
-	n.register <- player.Client
-
-	// send registration confirmation to client
-	buf := make([]byte, 0)
-	buf = append(buf, n.protocol.Encode(player.ID, state.GameTime(), &model.NetworkMessage{
-		MessageType: uint8(register),
-	})...)
-	n.Send(player.Client, buf)
+// Version of the wire format a client has to speak
+func (n *NetworkManager) Version() uint8 {
+	return n.protocol.Version()
 }
 
-// ForceDisconnect of Player
-func (n *NetworkManager) ForceDisconnect(player *model.Player) {
-	client := player.Client
-	client.Connection.Close(writeWait, false)
+// Register starts reading from and writing to a connection that just arrived
+func (n *NetworkManager) Register(client *model.Client) {
+	n.register <- client
+}
+
+// Disconnect a client. What was sent to it before still goes out.
+func (n *NetworkManager) Disconnect(client *model.Client) {
 	n.unregister <- client
 }
 
-// SendTime back to player
-func (n *NetworkManager) SendTime(player *model.Player, state *model.GameState, message *model.NetworkMessage) {
-	buf := make([]byte, 0)
-	buf = append(buf, n.protocol.Encode(player.ID, state.GameTime(), message)...)
-	n.Send(player.Client, buf)
-}
-
 // Send data to a client
-func (n *NetworkManager) Send(client *model.Client, message []byte) error {
-	n.direct <- directMessage{client: client, data: message}
-	return nil
+func (n *NetworkManager) Send(client *model.Client, message []byte) {
+	n.outgoing <- []delivery{{client: client, data: message}}
 }
 
-// BroadcastGameState ...
-func (n *NetworkManager) BroadcastGameState(state *model.GameState) {
-	buf := make([]byte, 0)
+// sendAll sends the same message to every player
+func (n *NetworkManager) sendAll(players []*model.Player, message []byte) {
+	if len(players) == 0 {
+		return
+	}
+	batch := make([]delivery, len(players))
+	for i, p := range players {
+		batch[i] = delivery{client: p.Client, data: message}
+	}
+	n.outgoing <- batch
+}
+
+// Welcome tells a client that it is a player now
+func (n *NetworkManager) Welcome(player *model.Player, state *model.GameState) {
+	n.Send(player.Client, n.protocol.Welcome(player.ID, state.TickNumber(), state.RoundLength()))
+}
+
+// Reject turns a client away that speaks another version of the protocol
+func (n *NetworkManager) Reject(client *model.Client) {
+	n.Send(client, n.protocol.Reject())
+	n.Disconnect(client)
+}
+
+// SendSnapshots sends every player the state of all tanks after the current
+// tick, each with the number of its own last input that went into it
+func (n *NetworkManager) SendSnapshots(state *model.GameState) {
 	players := state.GetPlayers()
-	for _, p := range players {
-		buf = append(buf, n.protocol.Encode(p.ID, state.GameTime(), &model.NetworkMessage{
-			MessageType: uint8(position),
-			Body:        p,
-		})...)
+	if len(players) == 0 {
+		return
 	}
-	if len(buf) > 0 {
-		n.broadcast <- buf
+	body := n.protocol.SnapshotBody(players)
+	tick := state.TickNumber()
+	batch := make([]delivery, len(players))
+	for i, p := range players {
+		batch[i] = delivery{client: p.Client, data: n.protocol.Snapshot(tick, p.Inputs.Applied(), p.InputsWaiting(), body)}
 	}
+	n.outgoing <- batch
 }
 
-// BroadcastGameStart ...
-func (n *NetworkManager) BroadcastGameStart(state *model.GameState) {
-	buf := n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
-		MessageType: uint8(gameStart),
-	})
-
-	if len(buf) > 0 {
-		n.broadcast <- buf
-	}
+// BroadcastRoundStart ...
+func (n *NetworkManager) BroadcastRoundStart(state *model.GameState) {
+	n.sendAll(state.GetPlayers(), n.protocol.RoundStart(state.RoundStartTick()))
 }
 
-// SendGameStartToClient ...
-func (n *NetworkManager) SendGameStartToClient(client *model.Client, state *model.GameState) {
-	buf := n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
-		MessageType: uint8(gameStart),
-	})
-
-	if len(buf) > 0 {
-		n.Send(client, buf)
-	}
+// SendRoundStart tells a player that joined a running round when it started
+func (n *NetworkManager) SendRoundStart(client *model.Client, state *model.GameState) {
+	n.Send(client, n.protocol.RoundStart(state.RoundStartTick()))
 }
 
-// BroadcastScoreboard tells every client the names, kills and deaths of all players
+// BroadcastRoundEnd ...
+func (n *NetworkManager) BroadcastRoundEnd(state *model.GameState) {
+	n.sendAll(state.GetPlayers(), n.protocol.RoundEnd(state.TickNumber()))
+}
+
+// BroadcastScoreboard tells every player the names, kills and deaths of all players
 func (n *NetworkManager) BroadcastScoreboard(state *model.GameState) {
-	n.broadcast <- n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
-		MessageType: uint8(scoreboard),
-		Body:        state.Scoreboard(),
-	})
+	n.sendAll(state.GetPlayers(), n.protocol.Scoreboard(state.Scoreboard()))
 }
 
-// BroadcastKill tells every client who destroyed whom
+// BroadcastKill tells every player who destroyed whom
 func (n *NetworkManager) BroadcastKill(state *model.GameState, killer int, victim int) {
-	n.broadcast <- n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
-		MessageType: uint8(kill),
-		Body:        model.Kill{Killer: killer, Victim: victim},
-	})
-}
-
-// BroadcastGameEnd ...
-func (n *NetworkManager) BroadcastGameEnd(state *model.GameState) {
-	buf := n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
-		MessageType: uint8(gameEnd),
-	})
-
-	if len(buf) > 0 {
-		n.broadcast <- buf
-	}
+	n.sendAll(state.GetPlayers(), n.protocol.Kill(model.Kill{Killer: killer, Victim: victim}))
 }
 
 // Writer constantly reads messages from the players NetworkOut and sends it to the websocket connection.
@@ -304,9 +279,16 @@ func (n *NetworkManager) reader(client *model.Client) {
 			log.Printf("Reader: Closing connection of Client %s: %s", client.Connection.Identifier(), err)
 			break
 		}
+		decoded := n.protocol.Decode(message)
+		// answered here and not by the game loop: the round trip a client
+		// measures does not include the wait for the next tick
+		if ping, ok := decoded.Body.(model.Ping); ok {
+			n.Send(client, n.protocol.Pong(ping.ClientTime))
+			continue
+		}
 		// never block here, a blocked reader stops answering pings and the client times out
 		select {
-		case client.NetworkIn <- n.protocol.Decode(message):
+		case client.NetworkIn <- decoded:
 		default:
 			log.Printf("Reader: Dropping message of Client %s: NetworkIn channel is full", client.Connection.Identifier())
 		}

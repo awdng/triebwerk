@@ -164,7 +164,7 @@ func expectRejected(url string) error {
 		return nil
 	}
 	defer c.Close()
-	c.WriteMessage(gorilla.BinaryMessage, append([]byte{0, 0}, []byte("one-too-many")...))
+	c.WriteMessage(gorilla.BinaryMessage, protocol.EncodeHello("one-too-many"))
 	c.SetReadDeadline(time.Now().Add(3 * time.Second))
 	for {
 		_, data, err := c.ReadMessage()

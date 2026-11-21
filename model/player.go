@@ -56,7 +56,10 @@ type Player struct {
 	// Control holds the keys for the coming tick, see GameState.ApplyInputs
 	Control Controls
 	// Inputs are the inputs of the client that wait for their tick
-	Inputs   *InputQueue
+	Inputs *InputQueue
+	// Starved is true if the client's input for the current tick did not
+	// arrive and the last one was applied again
+	Starved  bool
 	Collider *RectCollider
 	Client   *Client
 }
@@ -68,11 +71,7 @@ func NewPlayer(id int, x float32, y float32, conn Connection) *Player {
 		Health:   100,
 		Collider: NewRectCollider(x, y, width, depth),
 		Inputs:   NewInputQueue(),
-		Client: &Client{
-			NetworkOut: make(chan []byte, 100),
-			NetworkIn:  make(chan NetworkMessage, 100),
-			Connection: conn,
-		},
+		Client:   NewClient(conn),
 	}
 	player.Weapons = []*Weapon{NewWeapon(player)}
 	return player
@@ -204,6 +203,22 @@ func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 	r.TurretLastRotation = r.TurretRotation
 }
 
+// WaitingStarved is what InputsWaiting reports for a tick without an input
+const WaitingStarved = 255
+
+// InputsWaiting tells a client how its inputs arrive: how many of them wait
+// for their tick, or WaitingStarved if the current tick had none. A client
+// keeps this near one by sending a little faster or slower.
+func (p *Player) InputsWaiting() uint8 {
+	if p.Starved {
+		return WaitingStarved
+	}
+	if waiting := p.Inputs.Waiting(); waiting < WaitingStarved {
+		return uint8(waiting)
+	}
+	return WaitingStarved - 1
+}
+
 // IsAlive ...
 func (p *Player) IsAlive() bool {
 	if p.Health == 0 {
@@ -219,10 +234,31 @@ type Client struct {
 	Connection Connection
 }
 
+// NewClient wraps a connection that just arrived
+func NewClient(conn Connection) *Client {
+	return &Client{
+		NetworkOut: make(chan []byte, 100),
+		NetworkIn:  make(chan NetworkMessage, 100),
+		Connection: conn,
+	}
+}
+
 // Disconnect Client from the network
 // NetworkIn is not closed because the connection reader might still be writing to it.
 func (c *Client) Disconnect() {
 	close(c.NetworkOut)
+}
+
+// Hello is the first message of a client: the version of the wire format it
+// speaks and the token the master server knows it by
+type Hello struct {
+	Version uint8
+	Token   string
+}
+
+// Ping is answered with the same number, clients measure the round trip with it
+type Ping struct {
+	ClientTime uint32
 }
 
 // NetworkMessage represents an network message from or to a Client

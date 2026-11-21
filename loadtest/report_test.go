@@ -19,6 +19,11 @@ func healthyBot(name string, id int) BotReport {
 		MaxGap:         60 * time.Millisecond,
 		MaxPlayersSeen: 2,
 		Scoreboards:    30,
+		Pongs:          29,
+		InputsSent:     905,
+		LastAck:        903,
+		Acknowledged:   898,
+		Starved:        3,
 	}
 }
 
@@ -76,20 +81,32 @@ func TestCheckWantsScoreboards(t *testing.T) {
 	assert.Len(t, report.Check(expectations), 1)
 }
 
-func TestParseScoreboard(t *testing.T) {
-	body := []byte{0xe0, 0x93, 0x04, 0, 2, 3, 7, 0, 2, 0, 3, 'a', 'b', 'c', 12, 0, 0, 0, 0, 0}
-	players, ok := parseScoreboard(body)
-	assert.True(t, ok)
-	assert.Equal(t, map[int]string{3: "abc", 12: ""}, players)
+func TestCheckWantsInputsToArrive(t *testing.T) {
+	ignored := healthyBot("b", 2)
+	ignored.LastAck = 0
+	ignored.Acknowledged = 0
+	ignored.Starved = 0
+	late := healthyBot("c", 3)
+	late.Starved = 90
+	unanswered := healthyBot("d", 4)
+	unanswered.Pongs = 0
+	report := Report{Duration: 30 * time.Second, Bots: []BotReport{healthyBot("a", 1), ignored, late, unanswered}}
 
-	_, ok = parseScoreboard(body[:len(body)-1])
-	assert.False(t, ok, "cut off")
-	_, ok = parseScoreboard(append(append([]byte{}, body...), 1))
-	assert.False(t, ok, "bytes left over")
-	_, ok = parseScoreboard([]byte{0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 0xff})
-	assert.False(t, ok, "name is not utf8")
-	_, ok = parseScoreboard(nil)
-	assert.False(t, ok, "empty")
+	errs := report.Check(DefaultExpectations(0))
+	messages := make([]string, len(errs))
+	for i, err := range errs {
+		messages[i] = err.Error()
+	}
+	all := strings.Join(messages, "\n")
+	assert.Contains(t, all, "the server never applied an input of b (905 sent)")
+	assert.Contains(t, all, "the inputs of c came too late for 10.0 % of the ticks")
+	assert.Contains(t, all, "d never got an answer to a ping")
+	assert.Len(t, errs, 3)
+}
+
+func TestStarvedShare(t *testing.T) {
+	assert.Equal(t, 0.0, BotReport{}.StarvedShare())
+	assert.InDelta(t, 0.25, BotReport{Acknowledged: 200, Starved: 50}.StarvedShare(), 0.001)
 }
 
 func TestUpdateRate(t *testing.T) {

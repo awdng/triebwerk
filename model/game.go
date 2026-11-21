@@ -100,12 +100,14 @@ func (g *GameState) TickNumber() uint32 {
 	return g.tick.Load()
 }
 
-// playersInOrder returns the players by id: the result of a tick must not
-// depend on the order of a map
-func (g *GameState) playersInOrder() []*Player {
-	players := g.GetPlayers()
-	sort.Slice(players, func(i, j int) bool { return players[i].ID < players[j].ID })
-	return players
+// RoundLength is how long a round lasts
+func (g *GameState) RoundLength() time.Duration {
+	return g.length
+}
+
+// RoundStartTick is the tick the running round started at
+func (g *GameState) RoundStartTick() uint32 {
+	return g.roundStart.Load()
 }
 
 // ApplyInputs gives every player the keys for the coming tick: the next
@@ -117,9 +119,10 @@ func (g *GameState) ApplyInputs() {
 		if !inProgress {
 			p.Inputs.Reset()
 			p.Control = Controls{}
+			p.Starved = false
 			continue
 		}
-		p.Control, _ = p.Inputs.Next()
+		p.Control, p.Starved = p.Inputs.Next()
 	}
 }
 
@@ -128,7 +131,7 @@ func (g *GameState) ApplyInputs() {
 // matter what clients sent or whether they sent anything.
 func (g *GameState) Tick() {
 	if g.InProgress() {
-		players := g.playersInOrder()
+		players := g.GetPlayers()
 		for _, p := range players {
 			p.Fired = false
 			if p.IsAlive() {
@@ -152,15 +155,16 @@ func (g *GameState) Tick() {
 	g.tick.Add(1)
 }
 
-// GetPlayers returns the PlayerList
+// GetPlayers returns the players by id: what a tick does and what clients
+// are sent must not depend on the order of a map
 func (g *GameState) GetPlayers() []*Player {
-	players := make([]*Player, 0)
 	g.mutex.RLock()
-	defer g.mutex.RUnlock()
-
+	players := make([]*Player, 0, len(g.players))
 	for _, p := range g.players {
 		players = append(players, p)
 	}
+	g.mutex.RUnlock()
+	sort.Slice(players, func(i, j int) bool { return players[i].ID < players[j].ID })
 	return players
 }
 

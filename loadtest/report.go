@@ -32,6 +32,15 @@ type BotReport struct {
 	Scoreboards int
 	Kills       int
 	BadMessages int
+	// answers to pings
+	Pongs int
+	// inputs sent, the number of the last one the server applied, snapshots
+	// that came after the server had the first input and those among them
+	// for which no input had arrived in time
+	InputsSent   int
+	LastAck      uint32
+	Acknowledged int
+	Starved      int
 
 	lastHealth int
 }
@@ -42,6 +51,15 @@ func (r BotReport) UpdateRate() float64 {
 		return 0
 	}
 	return float64(r.StateMessages) / r.ActiveTime.Seconds()
+}
+
+// StarvedShare is the share of ticks for which the server had no input of
+// this player
+func (r BotReport) StarvedShare() float64 {
+	if r.Acknowledged == 0 {
+		return 0
+	}
+	return float64(r.Starved) / float64(r.Acknowledged)
 }
 
 // Report of a whole run
@@ -62,6 +80,10 @@ type Expectations struct {
 	MaxGap time.Duration
 	// state broadcasts per second every player has to receive, the server ticks at 30
 	MinUpdateRate float64
+	// Inputs: the server has to apply the inputs of every player and answer its pings
+	Inputs bool
+	// largest share of ticks for which a player's input may come too late
+	MaxStarvedShare float64
 }
 
 // DefaultExpectations for a run with the given number of players
@@ -72,6 +94,9 @@ func DefaultExpectations(players int) Expectations {
 		MinRounds:     1,
 		MaxGap:        250 * time.Millisecond,
 		MinUpdateRate: 25,
+		Inputs:        true,
+		// bots tick with the server's clock on the server's machine
+		MaxStarvedShare: 0.05,
 	}
 }
 
@@ -107,6 +132,15 @@ func (r Report) Check(e Expectations) []error {
 		if e.Scoreboard && b.Scoreboards == 0 {
 			fail("%s never received a scoreboard", b.Name)
 		}
+		if e.Inputs && b.InputsSent > 0 && b.LastAck == 0 {
+			fail("the server never applied an input of %s (%d sent)", b.Name, b.InputsSent)
+		}
+		if e.Inputs && r.Duration > 5*time.Second && b.Pongs == 0 {
+			fail("%s never got an answer to a ping", b.Name)
+		}
+		if e.MaxStarvedShare > 0 && b.StarvedShare() > e.MaxStarvedShare {
+			fail("the inputs of %s came too late for %.1f %% of the ticks, allowed %.1f %%", b.Name, 100*b.StarvedShare(), 100*e.MaxStarvedShare)
+		}
 		if b.BadMessages > 0 {
 			fail("%s received %d messages it could not read", b.Name, b.BadMessages)
 		}
@@ -124,12 +158,12 @@ func (r Report) Check(e Expectations) []error {
 func (r Report) String() string {
 	var s strings.Builder
 	fmt.Fprintf(&s, "load test ran %v with %d players\n", r.Duration.Round(time.Second), len(r.Bots))
-	fmt.Fprintf(&s, "%-8s %6s %5s %5s %7s %8s %8s %6s %5s %6s %4s\n",
-		"player", "ids", "start", "end", "states", "rate/s", "max gap", "seen", "shots", "deaths", "lost")
+	fmt.Fprintf(&s, "%-8s %6s %5s %5s %7s %8s %8s %6s %5s %6s %7s %8s %4s\n",
+		"player", "ids", "start", "end", "states", "rate/s", "max gap", "seen", "shots", "deaths", "inputs", "starved", "lost")
 	for _, b := range r.Bots {
-		fmt.Fprintf(&s, "%-8s %6s %5d %5d %7d %8.1f %8s %6d %5d %6d %4d\n",
+		fmt.Fprintf(&s, "%-8s %6s %5d %5d %7d %8.1f %8s %6d %5d %6d %7d %7.1f%% %4d\n",
 			b.Name, joinInts(b.PlayerIDs), b.RoundsStarted, b.RoundsEnded, b.StateMessages, b.UpdateRate(),
-			b.MaxGap.Round(time.Millisecond), b.MaxPlayersSeen, b.Shots, b.Deaths, b.LostConnections)
+			b.MaxGap.Round(time.Millisecond), b.MaxPlayersSeen, b.Shots, b.Deaths, b.InputsSent, 100*b.StarvedShare(), b.LostConnections)
 	}
 	return s.String()
 }

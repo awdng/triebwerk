@@ -1,36 +1,26 @@
 // Package loadtest simulates players that connect to a triebwerk server over
-// websockets, drive around with random human like inputs, shoot and sync
-// their clock. It records what every player receives so a run can be checked
+// websockets, drive around with random human like inputs, shoot and ping. It records what every player receives so a run can be checked
 // against expectations (see Report.Check). Used by cmd/loadtest and by the
 // load test in the game package.
 package loadtest
 
 import (
-	"encoding/binary"
 	"fmt"
 	"math/rand"
 	"sync"
 	"sync/atomic"
 	"time"
-	"unicode/utf8"
 
+	"github.com/awdng/triebwerk/model"
+	"github.com/awdng/triebwerk/protocol"
 	"github.com/gorilla/websocket"
 )
 
-// size of one player entry in a state broadcast:
-// id, type, gametime(4), sequence(4), 6*float32, shooting, health
-const entrySize = 36
-
-const (
-	msgState     = 1
-	msgRegister  = 2
-	msgTime      = 5
-	msgGameStart = 6
-	msgGameEnd   = 7
-	// names and scores of everybody, and who destroyed whom
-	msgScoreboard = 8
-	msgKill       = 9
-)
+// the bits of the keys in an input, in the order of Bot.keys
+var keyBits = []byte{
+	protocol.BitForward, protocol.BitBackward, protocol.BitLeft, protocol.BitRight,
+	protocol.BitTurretRight, protocol.BitTurretLeft, protocol.BitShoot,
+}
 
 // Stats are live counters shared by all bots of a run
 type Stats struct {
@@ -74,18 +64,21 @@ type Bot struct {
 	// current stretch of continuous state broadcasts inside a round
 	segmentStart time.Time
 	segmentLast  time.Time
+	// shot counter of the own tank in the last snapshot, -1 before the first
+	lastShots int
 }
 
 func newBot(id int, cfg *Config, stats *Stats) *Bot {
 	name := fmt.Sprintf("load-%02d", id)
 	return &Bot{
-		Name:   name,
-		url:    cfg.URL,
-		rng:    rand.New(rand.NewSource(time.Now().UnixNano() + int64(id))),
-		stats:  stats,
-		cfg:    cfg,
-		keys:   make([]byte, 7),
-		report: BotReport{Name: name},
+		Name:      name,
+		url:       cfg.URL,
+		rng:       rand.New(rand.NewSource(time.Now().UnixNano() + int64(id))),
+		stats:     stats,
+		cfg:       cfg,
+		keys:      make([]byte, 7),
+		report:    BotReport{Name: name},
+		lastShots: -1,
 	}
 }
 
@@ -154,7 +147,7 @@ func (b *Bot) play(until time.Time) {
 		return c.WriteMessage(websocket.BinaryMessage, data)
 	}
 	// the name is the auth token, the fake master server uses it as nickname
-	write(append([]byte{0, 0}, []byte(b.Name)...))
+	write(protocol.EncodeHello(b.Name))
 
 	done := make(chan struct{})
 	defer close(done)
@@ -187,87 +180,91 @@ func (b *Bot) lost() {
 }
 
 func (b *Bot) handle(data []byte) {
-	if len(data) < 6 {
+	if len(data) == 0 {
+		b.bad()
 		return
 	}
-	gameTime := binary.LittleEndian.Uint32(data[2:])
-	switch data[1] {
-	case msgRegister:
+	switch data[0] {
+	case protocol.Welcome:
+		if len(data) != 12 || data[1] != protocol.Version || data[3] != model.TickMillis {
+			b.bad()
+			return
+		}
 		b.mutex.Lock()
-		b.playerID = int(data[0])
+		b.playerID = int(data[2])
 		b.report.PlayerIDs = append(b.report.PlayerIDs, b.playerID)
+		b.lastShots = -1
 		b.mutex.Unlock()
-	case msgState:
+	case protocol.Snapshot:
+		snapshot, ok := protocol.DecodeSnapshot(data)
+		if !ok {
+			b.bad()
+			return
+		}
 		atomic.AddInt64(&b.stats.StateMessages, 1)
-		b.recordState(data)
+		b.recordState(snapshot)
 		if b.cfg.OnState != nil {
-			b.cfg.OnState(data)
+			b.cfg.OnState(snapshot)
 		}
-	case msgGameStart:
+	case protocol.RoundStart, protocol.RoundEnd:
+		if len(data) != 5 {
+			b.bad()
+			return
+		}
 		b.mutex.Lock()
-		b.report.RoundsStarted++
+		event := "start"
+		if data[0] == protocol.RoundStart {
+			b.report.RoundsStarted++
+		} else {
+			event = "end"
+			b.report.RoundsEnded++
+			b.endSegment()
+		}
 		b.mutex.Unlock()
 		if b.cfg.OnEvent != nil {
-			b.cfg.OnEvent("start", gameTime)
+			b.cfg.OnEvent(event, uint32(data[1])|uint32(data[2])<<8|uint32(data[3])<<16|uint32(data[4])<<24)
 		}
-	case msgGameEnd:
+	case protocol.Scoreboard:
+		if _, ok := protocol.DecodeScoreboard(data); !ok {
+			b.bad()
+			return
+		}
 		b.mutex.Lock()
-		b.report.RoundsEnded++
-		b.endSegment()
+		b.report.Scoreboards++
 		b.mutex.Unlock()
-		if b.cfg.OnEvent != nil {
-			b.cfg.OnEvent("end", gameTime)
+	case protocol.Kill:
+		if len(data) != 3 {
+			b.bad()
+			return
 		}
-	case msgScoreboard:
-		_, ok := parseScoreboard(data[6:])
 		b.mutex.Lock()
-		if ok {
-			b.report.Scoreboards++
-		} else {
-			b.report.BadMessages++
-		}
+		b.report.Kills++
 		b.mutex.Unlock()
-	case msgKill:
+	case protocol.Pong:
+		if len(data) != 5 {
+			b.bad()
+			return
+		}
 		b.mutex.Lock()
-		if len(data) == 8 {
-			b.report.Kills++
-		} else {
-			b.report.BadMessages++
-		}
+		b.report.Pongs++
 		b.mutex.Unlock()
+	case protocol.Reject:
+		b.cfg.logf("%s: the server speaks another version of the protocol", b.Name)
+		b.bad()
 	}
+	// types this bot does not know are ignored: new messages must not break old clients
 }
 
-// parseScoreboard reads the body of a scoreboard message (see
-// protocol/binary.go) into player id -> name. It is strict: every byte has
-// to be accounted for and names have to be utf8.
-func parseScoreboard(body []byte) (map[int]string, bool) {
-	if len(body) < 5 {
-		return nil, false
-	}
-	count := int(body[4])
-	players := make(map[int]string, count)
-	offset := 5
-	for i := 0; i < count; i++ {
-		if offset+6 > len(body) {
-			return nil, false
-		}
-		nameLength := int(body[offset+5])
-		if offset+6+nameLength > len(body) {
-			return nil, false
-		}
-		name := body[offset+6 : offset+6+nameLength]
-		if !utf8.Valid(name) {
-			return nil, false
-		}
-		players[int(body[offset])] = string(name)
-		offset += 6 + nameLength
-	}
-	return players, offset == len(body)
+// bad counts a message that did not have the agreed layout
+func (b *Bot) bad() {
+	b.mutex.Lock()
+	b.report.BadMessages++
+	b.mutex.Unlock()
 }
 
-// recordState checks one state broadcast: timing, players, own health and shots
-func (b *Bot) recordState(data []byte) {
+// recordState checks one snapshot: timing, players, own health and shots,
+// and how the server takes this bot's inputs
+func (b *Bot) recordState(snapshot protocol.SnapshotMessage) {
 	now := time.Now()
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
@@ -285,28 +282,39 @@ func (b *Bot) recordState(data []byte) {
 	}
 	b.segmentLast = now
 
-	entries := len(data) / entrySize
-	if entries > r.MaxPlayersSeen {
-		r.MaxPlayersSeen = entries
+	// the server applies one input per tick: once it has the first, a tick
+	// without one means inputs arrive later than they are needed
+	if snapshot.Ack > 0 {
+		r.Acknowledged++
+		if snapshot.Waiting == protocol.WaitingStarved {
+			r.Starved++
+		}
 	}
-	seen := make(map[byte]bool, entries)
-	for i := 0; i+entrySize <= len(data); i += entrySize {
-		e := data[i : i+entrySize]
-		if seen[e[0]] {
+	if snapshot.Ack > r.LastAck {
+		r.LastAck = snapshot.Ack
+	}
+
+	if len(snapshot.Players) > r.MaxPlayersSeen {
+		r.MaxPlayersSeen = len(snapshot.Players)
+	}
+	seen := make(map[int]bool, len(snapshot.Players))
+	for _, e := range snapshot.Players {
+		if seen[e.ID] {
 			r.DuplicateIDs++
 		}
-		seen[e[0]] = true
-		if int(e[0]) != b.playerID || b.playerID == 0 {
+		seen[e.ID] = true
+		if e.ID != b.playerID || b.playerID == 0 {
 			continue
 		}
-		health := int(e[35])
-		if b.report.lastHealth > 0 && health == 0 {
+		if b.report.lastHealth > 0 && e.Health == 0 {
 			r.Deaths++
 		}
-		b.report.lastHealth = health
-		if e[34] == 1 {
-			r.Shots++
+		b.report.lastHealth = e.Health
+		// shots are a counter that wraps
+		if b.lastShots >= 0 {
+			r.Shots += int(e.Shots - uint8(b.lastShots))
 		}
+		b.lastShots = int(e.Shots)
 	}
 }
 
@@ -320,12 +328,14 @@ func (b *Bot) endSegment() {
 	b.segmentLast = time.Time{}
 }
 
-// sendInputs sends the pressed keys at 30Hz like a render loop would
+// sendInputs sends the pressed keys once per server tick. Every message
+// carries the two inputs before it as well, like the browser client does.
 func (b *Bot) sendInputs(write func([]byte) error, until time.Time, done chan struct{}) {
 	var sequence uint32
+	var recent []byte // keys of the last inputs, newest first
 	nextChange := time.Now()
-	lastTimeSync := time.Now()
-	ticker := time.NewTicker(33 * time.Millisecond)
+	lastPing := time.Now()
+	ticker := time.NewTicker(model.TickMillis * time.Millisecond)
 	defer ticker.Stop()
 	for time.Now().Before(until) {
 		select {
@@ -337,19 +347,26 @@ func (b *Bot) sendInputs(write func([]byte) error, until time.Time, done chan st
 			nextChange = time.Now().Add(b.pressRandomKeys())
 		}
 		_, keys := b.Keys()
+		var bits byte
+		for i, pressed := range keys {
+			if pressed == 1 {
+				bits |= keyBits[i]
+			}
+		}
 		sequence++
-		message := append([]byte{0, 1}, keys...)
-		message = append(message, 0, 0, 0, 0)
-		binary.BigEndian.PutUint32(message[9:], sequence)
-		if write(message) != nil {
+		recent = append([]byte{bits}, recent...)
+		if len(recent) > protocol.MaxInputsPerMessage {
+			recent = recent[:protocol.MaxInputsPerMessage]
+		}
+		if write(protocol.EncodeInput(sequence, recent)) != nil {
 			return
 		}
-		if time.Since(lastTimeSync) > time.Second {
-			lastTimeSync = time.Now()
-			message := make([]byte, 6)
-			message[1] = msgTime
-			binary.BigEndian.PutUint32(message[2:], uint32(time.Now().UnixNano()/1e6))
-			write(message)
+		b.mutex.Lock()
+		b.report.InputsSent++
+		b.mutex.Unlock()
+		if time.Since(lastPing) > time.Second {
+			lastPing = time.Now()
+			write(protocol.EncodePing(uint32(time.Now().UnixNano() / 1e6)))
 		}
 	}
 }
