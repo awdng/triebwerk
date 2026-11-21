@@ -202,3 +202,16 @@ func TestReportOfARoundWithEndlessVisitorsStaysSmall(t *testing.T) {
 	assert.True(t, scorerKept)
 	assert.Equal(t, "anna", s.Players[0].Nickname)
 }
+
+// with twelve players on a server there is room for many who left
+func TestReportKeepsThoseWhoLeftUpToItsSize(t *testing.T) {
+	g := NewGameState("EU", time.Minute)
+	joined(g, "anna")
+	g.Start()
+	for i := 0; i < 100; i++ {
+		leaver := joined(g, "leaver")
+		leaver.Score = 1
+		g.RemovePlayer(leaver)
+	}
+	assert.Len(t, g.Snapshot().Players, 101, "nobody who scored is forgotten while there is room")
+}

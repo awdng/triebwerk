@@ -3,8 +3,10 @@ package infra
 import (
 	"encoding/json"
 	"io"
+	"log"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -330,4 +332,22 @@ func TestWaitingForTheMasterReturnsOnceItAnswers(t *testing.T) {
 		t.Fatal("still waiting for a master that answers")
 	}
 	assert.Greater(t, len(m.calls()), 1)
+}
+
+// a server the master refuses has to learn why from its own log
+func TestRegistrationTheMasterRefusesSaysWhyInTheLog(t *testing.T) {
+	master := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(`{"error":"a server needs a name of 1 to 80 characters (SERVER_NAME)"}`))
+	}))
+	defer master.Close()
+	var logged strings.Builder
+	log.SetOutput(&logged)
+	defer log.SetOutput(os.Stderr)
+
+	c := NewMasterServerClient(MasterConfig{URL: master.URL, Region: "EU", Map: "m", MaxPlayers: 12})
+	c.Init("game.example:9090")
+	assert.Contains(t, logged.String(), "a server needs a name of 1 to 80 characters (SERVER_NAME)")
+	assert.Contains(t, logged.String(), "400")
 }

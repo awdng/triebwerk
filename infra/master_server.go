@@ -120,7 +120,7 @@ func (m *MasterServerClient) register(stale string) string {
 	var answer struct {
 		ID string `json:"id"`
 	}
-	status, err := m.call(http.MethodPost, "/api/game/servers", map[string]any{
+	status, said, err := m.ask(http.MethodPost, "/api/game/servers", map[string]any{
 		"name":       name,
 		"address":    address,
 		"secure":     m.cfg.Secure,
@@ -130,8 +130,12 @@ func (m *MasterServerClient) register(stale string) string {
 		"protocol":   m.cfg.Protocol,
 		"version":    m.cfg.Version,
 	}, &answer)
-	if err != nil || status != http.StatusOK || answer.ID == "" {
-		log.Printf("Error registering with the master server at %s: %s", m.cfg.URL, describe(status, err))
+	if err == nil && (status != http.StatusOK || answer.ID == "") {
+		// what the master says is wrong: a missing key, a name it does not take
+		err = &refusal{status, said}
+	}
+	if err != nil {
+		log.Printf("Error registering with the master server at %s: %s", m.cfg.URL, err)
 		m.mutex.Lock()
 		m.id = ""
 		m.mutex.Unlock()
@@ -263,22 +267,42 @@ func (m *MasterServerClient) identity() (string, string) {
 	return m.id, m.address
 }
 
+// refusal is the master saying no, with the sentence it said why
+type refusal struct {
+	status int
+	said   string
+}
+
+func (r *refusal) Error() string {
+	if r.said == "" {
+		return fmt.Sprintf("it answered with status %d", r.status)
+	}
+	return fmt.Sprintf("it answered with status %d: %s", r.status, r.said)
+}
+
 // call sends one request and decodes the answer into answer if there is one
-// and the master said yes
+// and the master said yes. It returns the status of the answer; err is set
+// when there was none.
 func (m *MasterServerClient) call(method, path string, body, answer any) (int, error) {
+	status, _, err := m.ask(method, path, body, answer)
+	return status, err
+}
+
+// ask is call, and also returns what a master that refused said about it
+func (m *MasterServerClient) ask(method, path string, body, answer any) (int, string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), masterTimeout)
 	defer cancel()
 	var reader io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
 		if err != nil {
-			return 0, err
+			return 0, "", err
 		}
 		reader = bytes.NewReader(encoded)
 	}
 	request, err := http.NewRequestWithContext(ctx, method, m.cfg.URL+path, reader)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	if body != nil {
 		request.Header.Set("Content-Type", "application/json")
@@ -288,19 +312,26 @@ func (m *MasterServerClient) call(method, path string, body, answer any) (int, e
 	}
 	response, err := m.http.Do(request)
 	if err != nil {
-		return 0, err
+		return 0, "", err
 	}
 	defer response.Body.Close()
 	raw, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
 	if err != nil {
-		return response.StatusCode, err
+		return response.StatusCode, "", err
+	}
+	if response.StatusCode >= 400 {
+		var said struct {
+			Error string `json:"error"`
+		}
+		json.Unmarshal(raw, &said)
+		return response.StatusCode, said.Error, nil
 	}
 	if answer != nil && response.StatusCode == http.StatusOK {
 		if err := json.Unmarshal(raw, answer); err != nil {
-			return response.StatusCode, fmt.Errorf("an answer that is no JSON: %w", err)
+			return response.StatusCode, "", fmt.Errorf("an answer that is no JSON: %w", err)
 		}
 	}
-	return response.StatusCode, nil
+	return response.StatusCode, "", nil
 }
 
 func describe(status int, err error) string {

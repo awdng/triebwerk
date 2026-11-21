@@ -10,6 +10,7 @@ import (
 
 	"github.com/awdng/triebwerk/model"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // The layouts in this file are mirrored in the client, src/game/net/protocol.js
@@ -238,11 +239,11 @@ func TestEncodeScoreboardCutsNamesToValidText(t *testing.T) {
 	names := map[string]string{
 		"":                            "",
 		"short":                       "short",
-		strings.Repeat("x", 40):       strings.Repeat("x", 24),
-		strings.Repeat("x", 23) + "ä": strings.Repeat("x", 23),
-		strings.Repeat("ä", 20):       strings.Repeat("ä", 12),
+		strings.Repeat("x", 120):      strings.Repeat("x", 88),
+		strings.Repeat("x", 87) + "ä": strings.Repeat("x", 87),
+		strings.Repeat("ä", 50):       strings.Repeat("ä", 44),
 		"\xff\xfeA":                   "A",
-		strings.Repeat("🎯", 7):        strings.Repeat("🎯", 6),
+		strings.Repeat("🎯", 23):       strings.Repeat("🎯", 22),
 	}
 	for name, want := range names {
 		data := p.Scoreboard(scoreboardMessage(model.ScoreboardEntry{ID: 1, Name: name}))
@@ -250,7 +251,7 @@ func TestEncodeScoreboardCutsNamesToValidText(t *testing.T) {
 		got := string(data[12:])
 		assert.Equal(t, want, got, "name %q", name)
 		assert.Equal(t, len(want), length, "name %q", name)
-		assert.LessOrEqual(t, length, 24)
+		assert.LessOrEqual(t, length, 88)
 		assert.True(t, utf8.ValidString(got), "name %q", name)
 	}
 }
@@ -314,4 +315,23 @@ func TestDeniedSaysWhyAPlayerIsTurnedAway(t *testing.T) {
 	assert.Equal(t, []byte{Denied, DeniedNotAuthorized}, p.Denied(DeniedNotAuthorized))
 	assert.Equal(t, []byte{8, 1}, p.Denied(DeniedNotAuthorized))
 	assert.Equal(t, []byte{8, 2}, p.Denied(DeniedNoMaster))
+}
+
+// The master server gives a guest who uses the name of an account that name
+// with " (guest)" behind it. The longest name there is has 20 letters of
+// four bytes each; it reaches every client whole, or a guest could not be
+// told from the account.
+func TestScoreboardCarriesTheLongestNameTheMasterGivesWhole(t *testing.T) {
+	p := NewBinaryProtocol()
+	account := strings.Repeat("𝔸", 20)
+	guest := "Александр Иванович (guest)"
+	data := p.Scoreboard(scoreboardMessage(
+		model.ScoreboardEntry{ID: 1, Name: account + " (guest)"},
+		model.ScoreboardEntry{ID: 2, Name: guest},
+	))
+	board, ok := DecodeScoreboard(data)
+	require.True(t, ok)
+	assert.Equal(t, account+" (guest)", board.Players[0].Name)
+	assert.Equal(t, 88, len(board.Players[0].Name))
+	assert.Equal(t, guest, board.Players[1].Name)
 }

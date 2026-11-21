@@ -60,7 +60,8 @@ func handler() http.Handler {
 			reply(w, map[string]string{"error": "a player needs a name"})
 			return
 		}
-		log.Printf("AuthorizePlayer token=%s", request.Token)
+		// a token may be the session of an account on a real master: not for a log
+		log.Printf("AuthorizePlayer (a token of %d characters)", len(request.Token))
 		reply(w, map[string]any{"playerId": "fake-" + request.Token, "name": request.Token, "guest": false})
 	})
 	return mux

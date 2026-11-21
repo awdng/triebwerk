@@ -98,8 +98,10 @@ const (
 	maxDatagram = 1100
 	// MaxSnapshotPlayers is how many tanks fit into one snapshot
 	MaxSnapshotPlayers = (maxDatagram - snapshotHeader) / SnapshotEntrySize
-	// names on the scoreboard are cut to this many bytes
-	maxNameLength = 24
+	// Names on the scoreboard are cut to this many bytes. The longest name
+	// the master server gives fits whole: 20 characters of up to four bytes
+	// and " (guest)". A name that was cut could be taken for another.
+	maxNameLength = 88
 )
 
 // IsReliable says which lane a message type travels on

@@ -316,7 +316,8 @@ func (g *GameState) report(p *Player, connected bool) PlayerSnapshot {
 // remember keeps a player who left in the round's report. The mutex is
 // held by the caller.
 func (g *GameState) remember(left PlayerSnapshot) {
-	if len(g.departed) >= MaxRoundReport-maxPlayerID/2 {
+	// the report has room for MaxRoundReport: who is here, and who left
+	if room := max(MaxRoundReport-len(g.players), 1); len(g.departed) >= room {
 		drop := 0
 		for i, p := range g.departed {
 			if p.Score == 0 && p.Deaths == 0 {
