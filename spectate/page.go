@@ -213,7 +213,8 @@ const page = `<!doctype html>
     bots = {};
     (s.bots || []).forEach(function (b) { if (b.id) bots[b.id] = b; });
     set('s-game', running ? 'Running' : 'Paused', running ? 'good' : 'warn');
-    set('s-clients', s.connected + '/' + s.clients, s.connected === s.clients ? 'good' : 'warn');
+    // the load test wants all its players connected; a server with places left is fine
+    set('s-clients', s.connected + '/' + s.clients, s.lostConns === undefined ? '' : s.connected === s.clients ? 'good' : 'warn');
     set('s-ups', running ? s.updatesPerSec : '–', !running ? '' : s.updatesPerSec >= 28 ? 'good' : s.updatesPerSec >= 20 ? 'warn' : 'bad');
     set('s-gap', running ? s.maxGap + 'ms' : '–', !running ? '' : s.maxGap < 60 ? 'good' : s.maxGap < 200 ? 'warn' : 'bad');
     // a game server's own view does not count lost connections
