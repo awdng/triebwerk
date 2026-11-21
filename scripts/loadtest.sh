@@ -2,23 +2,59 @@
 # Runs a local load test: fake master server, game server and simulated
 # players. Open http://localhost:8090 to watch the match.
 # Extra arguments are passed to the load test, e.g. -n 12 -d 10m -reconnect 3
-set -euo pipefail
+# MASTER_PORT, GAME_PORT and VIEW_PORT change the ports (8081, 9090, 8090).
+set -uo pipefail
 
 cd "$(dirname "$0")/.."
+master_port=${MASTER_PORT:-8081}
+game_port=${GAME_PORT:-9090}
+view_port=${VIEW_PORT:-8090}
+
+port_open() {
+  (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
+}
+
+# a server that cannot listen exits at once, say why instead
+for port in "$master_port" "$game_port"; do
+  if port_open "$port"; then
+    echo "port $port is already in use; stop that process or set MASTER_PORT / GAME_PORT" >&2
+    exit 1
+  fi
+done
+
 work=$(mktemp -d)
 trap 'kill $(jobs -p) 2>/dev/null; rm -rf "$work"' EXIT
 
-go build -o "$work/triebwerk" ./cmd/server
-go build -o "$work/fakemaster" ./cmd/fakemaster
-go build -o "$work/loadtest" ./cmd/loadtest
+# the logs are deleted on exit, show them when something went wrong
+fail() {
+  echo "$1" >&2
+  tail -n 40 "$work/fakemaster.log" "$work/server.log" >&2
+  exit 1
+}
 
-"$work/fakemaster" -addr :8081 > "$work/fakemaster.log" 2>&1 &
-PUBLIC_IP=localhost PORT=9090 REGION=EU MASTERSERVER_GRPC=localhost:8081 GAME_LENGTH="${GAME_LENGTH:-300}" \
+go build -o "$work/triebwerk" ./cmd/server || exit 1
+go build -o "$work/fakemaster" ./cmd/fakemaster || exit 1
+go build -o "$work/loadtest" ./cmd/loadtest || exit 1
+
+"$work/fakemaster" -addr ":$master_port" > "$work/fakemaster.log" 2>&1 &
+master=$!
+PUBLIC_IP=localhost PORT="$game_port" REGION=EU MASTERSERVER_GRPC="localhost:$master_port" GAME_LENGTH="${GAME_LENGTH:-300}" \
   "$work/triebwerk" > "$work/server.log" 2>&1 &
 server=$!
-sleep 2
+
+# the game server opens its port once it reached the master server
+for _ in $(seq 100); do
+  port_open "$game_port" && break
+  kill -0 "$server" 2>/dev/null || fail "the game server stopped during startup:"
+  sleep 0.1
+done
+port_open "$game_port" || fail "the game server did not open port $game_port within 10s:"
 
 echo "server log: $work/server.log"
-"$work/loadtest" -url ws://localhost:9090/echo -view :8090 "$@" &
+"$work/loadtest" -url "ws://localhost:$game_port/echo" -view ":$view_port" "$@" &
 wait -n
-kill -0 $server 2>/dev/null || { echo "server stopped:"; tail -40 "$work/server.log"; exit 1; }
+status=$?
+if ! kill -0 "$server" 2>/dev/null || ! kill -0 "$master" 2>/dev/null; then
+  fail "a server stopped during the load test:"
+fi
+exit "$status"

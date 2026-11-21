@@ -15,10 +15,8 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install goimports
-        run: go install golang.org/x/tools/cmd/goimports@latest
-
-      # formatting, vet, unit tests and the in-process 12 player load test
+      # formatting (goimports is a tool in go.mod), vet, race unit tests and
+      # the in-process 12 player load test
       - name: Test
         run: make test
 

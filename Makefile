@@ -1,12 +1,17 @@
 # runtime options
 COMMIT_HASH = $(shell git rev-parse --short HEAD)
 TAG         = $(shell git symbolic-ref -q --short HEAD || git describe --tags --exact-match)
-GOPACKAGES  = $(shell go list ./... | grep -v cmd/wasm)
+# -e: cmd/wasm only builds for js/wasm, without it go list prints a build constraint error
+GOPACKAGES  = $(shell go list -e ./... | grep -v cmd/wasm)
 GOFILES		= $(shell find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./cmd/wasm/*")
 HAS_GOLINT  = $(shell command -v golint)
 
 # go options
 GO       ?= go
+# pinned in go.mod (tool directive), nothing to install
+GOIMPORTS = $(GO) tool goimports
+# the race detector needs cgo, and cgo needs a C compiler (gcc)
+GOTEST   = CGO_ENABLED=1 $(GO) test -race
 LDFLAGS  = -X "main.CommitHash=$(COMMIT_HASH)" -X "main.Tag=$(TAG)"
 
 help: ## Display this help
@@ -21,14 +26,14 @@ run: build
 	@export `cat ${mkfile_path}.env | xargs`; ./triebwerk
 
 tools: ## Install all necessary tools
-	$(GO) install golang.org/x/tools/cmd/goimports@latest
 	$(GO) install golang.org/x/lint/golint@latest
 
 fmt-check: ## Check formatting (goimports), fails if a file needs formatting
-	@ test -z "$$(goimports -l $(GOFILES))" || (goimports -d $(GOFILES); echo "run make fmt"; exit 1)
+	@ out=$$($(GOIMPORTS) -l $(GOFILES)) || exit 1; \
+	  test -z "$$out" || ($(GOIMPORTS) -d $(GOFILES); echo "run make fmt"; exit 1)
 
 fmt: ## Fix formatting (goimports)
-	@ goimports -w $(GOFILES)
+	@ $(GOIMPORTS) -w $(GOFILES)
 
 lint: ## Perform lint checks
 ifndef HAS_GOLINT
@@ -42,20 +47,20 @@ vet: ## Perform vet checks
 test: fmt-check vet test-unit ## Execute all checks and tests, includes the 12 player load test (about 40s)
 
 test-unit: ## Execute unit tests and the in-process 12 player load test
-	$(GO) test -race -v $(GOPACKAGES)
+	$(GOTEST) -v $(GOPACKAGES)
 
 test-short: ## Execute unit tests without the load test
-	$(GO) test -race -short $(GOPACKAGES)
+	$(GOTEST) -short $(GOPACKAGES)
 
 wasm: ## Build the client simulation (cmd/wasm) into the client
 	GOOS=js GOARCH=wasm $(GO) build -o ../client/public/game/tanks.wasm ./cmd/wasm
 
 integration-test: ## Execute integration tests
 	@test -f .env || (echo "File \".env\" does not exist and is needed to run integration test" && exit 1)
-	@export `cat ${mkfile_path}.env | xargs`; $(GO) test -v -race -tags integration ./...
+	@export `cat ${mkfile_path}.env | xargs`; $(GOTEST) -v -tags integration ./...
 
 cover: ## Execute unit tests with coverage
-	$(GO) test -v -race -covermode=atomic -coverpkg=$(shell echo $(GOPACKAGES) | tr " " ",") -coverprofile=cover.out ./...
+	$(GOTEST) -v -covermode=atomic -coverpkg=$(shell echo $(GOPACKAGES) | tr " " ",") -coverprofile=cover.out ./...
 
 cover-html: cover ## Generate and show HTML coverage report
 	$(GO) tool cover -html=cover.out
@@ -73,8 +78,12 @@ build-static: fmt ## Build binaries statically
 loadtest: ## Run a local load test with a live view on http://localhost:8090
 	./scripts/loadtest.sh
 
+qa: ## Server, bots and the ../client build for other machines (Tailscale), see scripts/qa.sh
+	./scripts/qa.sh
+
+# own ports, so a running `make loadtest` or local game does not collide
 loadtest-check: ## Run the real binaries with 12 players for one round, fail on drops, stalls or missing rounds
-	GAME_LENGTH=15 ./scripts/loadtest.sh -n 12 -d 35s -check -view ''
+	MASTER_PORT=28081 GAME_PORT=29090 GAME_LENGTH=15 ./scripts/loadtest.sh -n 12 -d 35s -check -view ''
 
 clean: ## Cleanup runtime files
 	rm -rf triebwerk *.out
@@ -82,4 +91,4 @@ clean: ## Cleanup runtime files
 clean-all: clean ## Cleanup ALL runtime files
 	rm -rf triebwerk
 
-.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit test-short wasm integration-test cover cover-html build build-static loadtest loadtest-check clean clean-all
+.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit test-short wasm integration-test cover cover-html build build-static loadtest loadtest-check qa clean clean-all
