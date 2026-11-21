@@ -38,6 +38,8 @@ const (
 	// a client that is not heard from for this long is gone
 	sessionIdleTimeout = 6 * time.Second
 	sessionKeepAlive   = 2 * time.Second
+	// payload of the packets a session starts with, see serveSessions
+	sessionInitialPacketSize = 1200
 )
 
 // Config of a transport
@@ -252,8 +254,17 @@ func (t *Transport) serveSessions(udp net.PacketConn, tlsConf *tls.Config) *webt
 			EnableDatagrams: true,
 			// what WebTransport streams need to be reset cleanly
 			EnableStreamResetPartialDelivery: true,
-			MaxIdleTimeout:                   sessionIdleTimeout,
-			KeepAlivePeriod:                  sessionKeepAlive,
+			// Packets start at the size every QUIC path has to carry and
+			// grow where the path is found to allow more. The library's
+			// own first guess is 1280 bytes of payload, 1308 on the wire:
+			// too long for a VPN tunnel with an MTU of 1280 (Tailscale,
+			// WireGuard). The kernel refuses such a packet, the library
+			// takes that for a lost one, and since the first packet of the
+			// server's handshake is always full the handshake never gets
+			// through.
+			InitialPacketSize: sessionInitialPacketSize,
+			MaxIdleTimeout:    sessionIdleTimeout,
+			KeepAlivePeriod:   sessionKeepAlive,
 		},
 		Handler: mux,
 	}

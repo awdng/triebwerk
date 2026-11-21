@@ -87,6 +87,8 @@ func dialWebTransport(url string) (conn, error) {
 			EnableDatagrams:                  true,
 			EnableStreamResetPartialDelivery: true,
 			KeepAlivePeriod:                  2 * time.Second,
+			// fits through a VPN tunnel, see the server's transport package
+			InitialPacketSize: 1200,
 		},
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

@@ -388,3 +388,98 @@ func TestOfferIsAnsweredOverHTTP3Too(t *testing.T) {
 	assert.NotEmpty(t, o.WebTransport.CertHash)
 	assert.Equal(t, "*", header.Get("Access-Control-Allow-Origin"))
 }
+
+// narrowPath relays UDP datagrams between a client and the server like a
+// path whose packets may be at most mtu bytes long: larger ones vanish.
+// Returns the port clients connect to.
+func narrowPath(t *testing.T, serverPort string, mtu int) string {
+	t.Helper()
+	// what is left for the payload of a datagram: 20 bytes IPv4, 8 bytes UDP
+	limit := mtu - 28
+	front, err := net.ListenPacket("udp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { front.Close() })
+	server, err := net.ResolveUDPAddr("udp", "127.0.0.1:"+serverPort)
+	require.NoError(t, err)
+
+	go func() {
+		backs := map[string]*net.UDPConn{}
+		defer func() {
+			for _, back := range backs {
+				back.Close()
+			}
+		}()
+		buf := make([]byte, 65536)
+		for {
+			n, client, err := front.ReadFrom(buf)
+			if err != nil {
+				return
+			}
+			if n > limit {
+				continue
+			}
+			back := backs[client.String()]
+			if back == nil {
+				back, err = net.DialUDP("udp", nil, server)
+				if err != nil {
+					return
+				}
+				backs[client.String()] = back
+				go func(back *net.UDPConn, client net.Addr) {
+					reply := make([]byte, 65536)
+					for {
+						n, err := back.Read(reply)
+						if err != nil {
+							return
+						}
+						if n <= limit {
+							front.WriteTo(reply[:n], client)
+						}
+					}
+				}(back, client)
+			}
+			back.Write(buf[:n])
+		}
+	}()
+	_, port, err := net.SplitHostPort(front.LocalAddr().String())
+	require.NoError(t, err)
+	return port
+}
+
+// A VPN tunnel carries packets of 1280 bytes and no more (Tailscale,
+// WireGuard). Every QUIC path has to carry 1200 bytes of payload, which
+// fits; the library's own first guess of 1280 bytes of payload does not,
+// and the first packet of the server's handshake is always full.
+func TestWebTransportConnectsOverAPathThatCarriesOnly1280Bytes(t *testing.T) {
+	s := start(t, Config{Address: "localhost", SelfSigned: true})
+	port := narrowPath(t, s.port, 1280)
+
+	d := &webtransport.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true, NextProtos: []string{http3.NextProtoH3}},
+		// a browser sends packets that fit
+		QUICConfig: &quic.Config{EnableDatagrams: true, EnableStreamResetPartialDelivery: true, InitialPacketSize: 1200},
+	}
+	defer d.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, session, err := d.Dial(ctx, "https://127.0.0.1:"+port+"/wt", nil)
+	require.NoError(t, err, "the handshake did not get through")
+	defer session.CloseWithError(0, "")
+
+	// and it plays: a stream message, a datagram each way, a full snapshot
+	stream, err := session.OpenStreamSync(ctx)
+	require.NoError(t, err)
+	conn := s.accept()
+	_, err = stream.Write(frame([]byte{1, 2, 'x'}))
+	require.NoError(t, err)
+	data, err := conn.Read()
+	require.NoError(t, err)
+	assert.Equal(t, []byte{1, 2, 'x'}, data)
+
+	snapshot := make([]byte, 1100)
+	snapshot[0] = 17
+	require.NoError(t, conn.WriteUnreliable(snapshot))
+	received, err := session.ReceiveDatagram(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, snapshot, received)
+}
