@@ -47,6 +47,11 @@ server, the game server, 2 simulated players and the production client build,
 and prints the URLs for this machine's Tailscale IP. Ctrl-C stops everything.
 Ports and options are listed at the top of scripts/qa.sh.
 
+Clients get the names, kills and deaths of all players in a scoreboard message
+(once a second and after every change) and a kill message when a tank is
+destroyed; the byte layout is documented in protocol/binary.go. The load test
+bots read both and the checks fail when a player never receives a scoreboard.
+
 The browser client in `../client` connects to the same server, see its README.
 The load test only needs Go, the fake master server accepts every player so
 the nickname entered in the client is used as its name.
