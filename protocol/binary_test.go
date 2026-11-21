@@ -15,7 +15,7 @@ import (
 // The layouts in this file are mirrored in the client, src/game/net/protocol.js
 
 func TestLanes(t *testing.T) {
-	for _, reliable := range []byte{Hello, Welcome, Reject, RoundStart, RoundEnd, Scoreboard, Kill} {
+	for _, reliable := range []byte{Hello, Welcome, Reject, RoundStart, RoundEnd, Scoreboard, Kill, Denied} {
 		assert.True(t, IsReliable(reliable), "type %d", reliable)
 	}
 	for _, unreliable := range []byte{Input, Snapshot, Ping, Pong} {
@@ -306,4 +306,12 @@ func TestClientMessagesAreUnderstoodByTheServer(t *testing.T) {
 		{Sequence: 9, Backward: true},
 		{Sequence: 8},
 	}, inputs)
+}
+
+// the same bytes as in the client's protocol.test.js
+func TestDeniedSaysWhyAPlayerIsTurnedAway(t *testing.T) {
+	p := NewBinaryProtocol()
+	assert.Equal(t, []byte{Denied, DeniedNotAuthorized}, p.Denied(DeniedNotAuthorized))
+	assert.Equal(t, []byte{8, 1}, p.Denied(DeniedNotAuthorized))
+	assert.Equal(t, []byte{8, 2}, p.Denied(DeniedNoMaster))
 }

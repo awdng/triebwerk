@@ -29,6 +29,7 @@ type Protocol interface {
 	Decode(data []byte) model.NetworkMessage
 	Welcome(id int, tick uint32, roundLength time.Duration) []byte
 	Reject() []byte
+	Denied(reason byte) []byte
 	RoundStart(tick uint32) []byte
 	RoundEnd(tick uint32) []byte
 	Scoreboard(board *model.Scoreboard) []byte
@@ -186,6 +187,12 @@ func (n *NetworkManager) Welcome(player *model.Player, state *model.GameState) {
 // Reject turns a client away that speaks another version of the protocol
 func (n *NetworkManager) Reject(client *model.Client) {
 	n.Send(client, n.protocol.Reject())
+	n.Disconnect(client)
+}
+
+// Deny turns a player away that the master server did not vouch for
+func (n *NetworkManager) Deny(client *model.Client, reason byte) {
+	n.Send(client, n.protocol.Denied(reason))
 	n.Disconnect(client)
 }
 

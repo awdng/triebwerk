@@ -28,7 +28,7 @@ import (
 )
 
 // ErrNotAuthorized is returned for a player the master server turns away
-var ErrNotAuthorized = errors.New("the master server does not accept this player")
+var ErrNotAuthorized = model.ErrNotAuthorized
 
 // errUnknownServer is the master's answer to a server it does not know
 var errUnknownServer = errors.New("the master server does not know this server")

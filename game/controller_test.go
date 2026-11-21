@@ -182,6 +182,9 @@ func (testMaster) AuthorizePlayer(token string) (string, string, error) {
 	if token == "" {
 		return "", "", assert.AnError
 	}
+	if token == "pz_expired" {
+		return "", "", model.ErrNotAuthorized
+	}
 	return "id-" + token, token, nil
 }
 
@@ -645,4 +648,27 @@ func TestEndOfARoundIsReportedToTheMasterServerWithEverybodyWhoTookPart(t *testi
 	assert.True(t, beat.InProgress)
 	require.Len(t, beat.Players, 1)
 	assert.Equal(t, 0, beat.Players[0].Score)
+}
+
+// a player is a tank before the master server has said who it is. If the
+// master says no, the client is told why before it is closed: it has to
+// sign in again, or to wait for a master that is down
+func TestPlayerTheMasterTurnsAwayIsToldWhy(t *testing.T) {
+	for token, reason := range map[string]byte{"pz_expired": protocol.DeniedNotAuthorized, "": protocol.DeniedNoMaster} {
+		s := newTestServer(t, 12)
+		conn := s.connect("somebody")
+		conn.send(protocol.EncodeHello(token))
+		s.tick()
+		conn.read(protocol.Welcome)
+		// the master is asked in the background: tick until it has answered
+		for i := 0; i < 500 && s.controller.state.GetPlayerCount() > 0; i++ {
+			time.Sleep(time.Millisecond)
+			s.tick()
+		}
+		assert.Equal(t, []byte{protocol.Denied, reason}, conn.read(protocol.Denied), "token %q", token)
+		assert.True(t, conn.isClosed())
+		s.tick()
+		assert.Equal(t, 0, s.controller.state.GetPlayerCount())
+		assert.Empty(t, s.controller.latestSnapshot().Players, "who was turned away took no part in the round")
+	}
 }

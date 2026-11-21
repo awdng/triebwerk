@@ -1,6 +1,7 @@
 package game
 
 import (
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -257,9 +258,12 @@ func (g *Controller) finishAuthorization(e authEvent) {
 		return
 	}
 	if e.err != nil {
-		log.Printf("GameManager: Player %d (%s) could not be authorized, forcing disconnect: %s", p.ID, p.GlobalID, e.err)
-		p.Client.Connection.Close(writeWait, false)
-		g.networkManager.Disconnect(p.Client)
+		log.Printf("GameManager: Player %d could not be authorized, forcing disconnect: %s", p.ID, e.err)
+		reason := model.DeniedNoMaster
+		if errors.Is(e.err, model.ErrNotAuthorized) {
+			reason = model.DeniedNotAuthorized
+		}
+		g.networkManager.Deny(p.Client, reason)
 		return
 	}
 	p.GlobalID = e.globalID

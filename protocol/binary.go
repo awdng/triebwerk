@@ -16,6 +16,9 @@
 //	6  Scoreboard  s>c  round length in ms u32, count u8, then per player:
 //	                    id u8, kills u16, deaths u16, name length u8, name utf8
 //	7  Kill        s>c  killer id u8, victim id u8
+//	8  Denied      s>c  reason u8: 1 the master server does not accept the
+//	                    token (sign in again), 2 the master server did not
+//	                    answer; the connection is closed
 //
 // The unreliable lane carries what is replaced by the next message anyway
 // (types from 16). Messages may be lost, doubled or arrive out of order:
@@ -56,6 +59,7 @@ const (
 	Hello      = 1
 	Welcome    = 2
 	Reject     = 3
+	Denied     = 8
 	RoundStart = 4
 	RoundEnd   = 5
 	Scoreboard = 6
@@ -202,6 +206,17 @@ func (BinaryProtocol) Welcome(id int, tick uint32, roundLength time.Duration) []
 // Reject turns away a client that speaks another version
 func (BinaryProtocol) Reject() []byte {
 	return []byte{Reject, Version}
+}
+
+// Why a player is turned away after its hello
+const (
+	DeniedNotAuthorized = model.DeniedNotAuthorized
+	DeniedNoMaster      = model.DeniedNoMaster
+)
+
+// Denied turns away a player the master server did not vouch for
+func (BinaryProtocol) Denied(reason byte) []byte {
+	return []byte{Denied, reason}
 }
 
 // RoundStart ...

@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -35,6 +36,18 @@ type Controls struct {
 	Shoot       bool
 	Sequence    uint32
 }
+
+// ErrNotAuthorized is the master server saying no to a player's token. Any
+// other error of an authorization means the master could not be asked.
+var ErrNotAuthorized = errors.New("the master server does not accept this player")
+
+// Why a player is turned away after its hello, as the client is told
+const (
+	// DeniedNotAuthorized: the master server does not accept the token
+	DeniedNotAuthorized byte = 1
+	// DeniedNoMaster: the master server did not answer
+	DeniedNoMaster byte = 2
+)
 
 // Player ...
 type Player struct {
