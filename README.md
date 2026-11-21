@@ -24,10 +24,14 @@ MASTER_URL    address of the master, default http://localhost:8081
 SERVER_KEY    what the master asks game servers for, if it does
 SERVER_NAME   name in the list of servers, default "<REGION> <PUBLIC_IP>:<PORT>"
 A token that is a session of an account makes the player that account, any
-other token is the name of a guest. A player the master turns away is told
+other token is the name of a guest. An account plays one match at a time:
+the master turns it away while it is in a match on another server, and on
+one server a second connection of an account takes the place of the first
+(a second window, a reload). The server tells the master at once when an
+account leaves, and drops the accounts a heartbeat's answer names. A player the master turns away is told
 why (message Denied) before the connection is closed.
-cmd/fakemaster speaks the same API, accepts every server and every player
-and keeps nothing: the tests and scripts of this repository need no master.
+cmd/fakemaster speaks the same API, accepts every server, takes every player
+for a guest by the name given and keeps nothing: the tests and scripts of this repository need no master.
 `make stack` in ../master runs the real thing: master, several game servers,
 bots that play as accounts (cmd/loadtest -tokens).
 

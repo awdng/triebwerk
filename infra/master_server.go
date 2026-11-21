@@ -149,9 +149,10 @@ func (m *MasterServerClient) register(stale string) string {
 }
 
 // SendHeartbeat tells the master that the server is alive, who is on it
-// and what the scores of its round are
-func (m *MasterServerClient) SendHeartbeat(snapshot model.StateSnapshot) {
-	m.report(snapshot)
+// and what the scores of its round are. It returns the accounts the master
+// wants dropped: they are in a match on another server already.
+func (m *MasterServerClient) SendHeartbeat(snapshot model.StateSnapshot) []string {
+	return m.report(snapshot)
 }
 
 // EndGame reports the final scores of a round. Every heartbeat until the
@@ -160,38 +161,43 @@ func (m *MasterServerClient) EndGame(snapshot model.StateSnapshot) {
 	m.report(snapshot)
 }
 
-func (m *MasterServerClient) report(snapshot model.StateSnapshot) {
+func (m *MasterServerClient) report(snapshot model.StateSnapshot) []string {
 	id, _ := m.identity()
 	if id == "" {
 		if id = m.register(""); id == "" {
-			return
+			return nil
 		}
 	}
 	body := m.heartbeat(snapshot)
-	err := m.put(id, body)
+	kick, err := m.put(id, body)
 	if errors.Is(err, errUnknownServer) {
 		// the master was restarted: tell it who we are and say it again
 		if id = m.register(id); id == "" {
-			return
+			return nil
 		}
-		err = m.put(id, body)
+		kick, err = m.put(id, body)
 	}
 	if err != nil {
 		log.Printf("Error sending the heartbeat to the master server: %s", err)
 	}
+	return kick
 }
 
-func (m *MasterServerClient) put(id string, body any) error {
-	status, err := m.call(http.MethodPut, "/api/game/servers/"+id, body, nil)
+// put sends a heartbeat and returns the accounts the master wants dropped
+func (m *MasterServerClient) put(id string, body any) ([]string, error) {
+	var answer struct {
+		Kick []string `json:"kick"`
+	}
+	status, err := m.call(http.MethodPut, "/api/game/servers/"+id, body, &answer)
 	switch {
 	case err != nil:
-		return err
+		return nil, err
 	case status == http.StatusNotFound:
-		return errUnknownServer
+		return nil, errUnknownServer
 	case status != http.StatusNoContent && status != http.StatusOK:
-		return errors.New(describe(status, nil))
+		return nil, errors.New(describe(status, nil))
 	}
-	return nil
+	return answer.Kick, nil
 }
 
 type heartbeatPlayer struct {
@@ -216,8 +222,13 @@ func (m *MasterServerClient) heartbeat(snapshot model.StateSnapshot) map[string]
 			SecondsPlayed: p.SecondsPlayed, Connected: p.Connected,
 		})
 	}
+	accounts := snapshot.Accounts
+	if accounts == nil {
+		accounts = []string{}
+	}
 	return map[string]any{
-		"online": snapshot.Online,
+		"online":   snapshot.Online,
+		"accounts": accounts,
 		"round": map[string]any{
 			"key":            key,
 			"active":         snapshot.InProgress,
@@ -231,16 +242,21 @@ func (m *MasterServerClient) heartbeat(snapshot model.StateSnapshot) map[string]
 
 // AuthorizePlayer returns the account id and the name of the player a token
 // belongs to. A guest has a name and no id. ErrNotAuthorized is the master
-// saying no; any other error is the master not answering.
+// saying no, model.ErrPlayingElsewhere that the account is in a match on
+// another server; any other error is the master not answering.
 func (m *MasterServerClient) AuthorizePlayer(token string) (string, string, error) {
 	var answer struct {
 		PlayerID string `json:"playerId"`
 		Name     string `json:"name"`
 	}
-	status, err := m.call(http.MethodPost, "/api/game/authorize", map[string]string{"token": token}, &answer)
+	// the master is told which server asks: it keeps an account to one match
+	id, _ := m.identity()
+	status, err := m.call(http.MethodPost, "/api/game/authorize", map[string]string{"token": token, "serverId": id}, &answer)
 	switch {
 	case err != nil:
 		return "", "", fmt.Errorf("the master server did not answer: %w", err)
+	case status == http.StatusConflict:
+		return "", "", model.ErrPlayingElsewhere
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return "", "", ErrNotAuthorized
 	case status != http.StatusOK || answer.Name == "":

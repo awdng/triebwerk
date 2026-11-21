@@ -315,6 +315,9 @@ func TestDeniedSaysWhyAPlayerIsTurnedAway(t *testing.T) {
 	assert.Equal(t, []byte{Denied, DeniedNotAuthorized}, p.Denied(DeniedNotAuthorized))
 	assert.Equal(t, []byte{8, 1}, p.Denied(DeniedNotAuthorized))
 	assert.Equal(t, []byte{8, 2}, p.Denied(DeniedNoMaster))
+	// an account plays one match at a time
+	assert.Equal(t, []byte{8, 3}, p.Denied(DeniedElsewhere))
+	assert.Equal(t, []byte{8, 4}, p.Denied(DeniedReplaced))
 }
 
 // The master server gives a guest who uses the name of an account that name

@@ -47,7 +47,16 @@ const (
 	DeniedNotAuthorized byte = 1
 	// DeniedNoMaster: the master server did not answer
 	DeniedNoMaster byte = 2
+	// DeniedElsewhere: the account is in a match on another server
+	DeniedElsewhere byte = 3
+	// DeniedReplaced: the account joined this server again, from another
+	// window or after a reload, and that connection plays now
+	DeniedReplaced byte = 4
 )
+
+// ErrPlayingElsewhere is the master server saying that the account of a
+// token is in a match on another server: an account plays one at a time
+var ErrPlayingElsewhere = errors.New("the account is in a match on another server")
 
 // Player ...
 type Player struct {

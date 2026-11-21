@@ -34,10 +34,11 @@ type fakeMaster struct {
 
 func (m *fakeMaster) Init(address string) {}
 
-func (m *fakeMaster) SendHeartbeat(s model.StateSnapshot) {
+func (m *fakeMaster) SendHeartbeat(s model.StateSnapshot) []string {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.heartbeats = append(m.heartbeats, s)
+	return nil
 }
 
 func (m *fakeMaster) EndGame(s model.StateSnapshot) {

@@ -62,7 +62,9 @@ func handler() http.Handler {
 		}
 		// a token may be the session of an account on a real master: not for a log
 		log.Printf("AuthorizePlayer (a token of %d characters)", len(request.Token))
-		reply(w, map[string]any{"playerId": "fake-" + request.Token, "name": request.Token, "guest": false})
+		// Everybody is a guest by the name they give. With an account id two
+		// players of one name would be one account, which plays once.
+		reply(w, map[string]any{"playerId": "", "name": request.Token, "guest": true})
 	})
 	return mux
 }

@@ -18,7 +18,9 @@
 //	7  Kill        s>c  killer id u8, victim id u8
 //	8  Denied      s>c  reason u8: 1 the master server does not accept the
 //	                    token (sign in again), 2 the master server did not
-//	                    answer; the connection is closed
+//	                    answer, 3 the account is in a match on another
+//	                    server, 4 the account joined this server again and
+//	                    that connection plays now; the connection is closed
 //
 // The unreliable lane carries what is replaced by the next message anyway
 // (types from 16). Messages may be lost, doubled or arrive out of order:
@@ -214,6 +216,8 @@ func (BinaryProtocol) Reject() []byte {
 const (
 	DeniedNotAuthorized = model.DeniedNotAuthorized
 	DeniedNoMaster      = model.DeniedNoMaster
+	DeniedElsewhere     = model.DeniedElsewhere
+	DeniedReplaced      = model.DeniedReplaced
 )
 
 // Denied turns away a player the master server did not vouch for

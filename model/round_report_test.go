@@ -215,3 +215,19 @@ func TestReportKeepsThoseWhoLeftUpToItsSize(t *testing.T) {
 	}
 	assert.Len(t, g.Snapshot().Players, 101, "nobody who scored is forgotten while there is room")
 }
+
+// the master server keeps an account to one match: it is told who is here
+func TestSnapshotListsTheAccountsThatAreOnTheServer(t *testing.T) {
+	g := NewGameState("EU", time.Minute)
+	joined(g, "anna")
+	guest := joined(g, "visitor")
+	guest.GlobalID = ""
+	g.AddPlayer(NewPlayer(g.GetNewPlayerID(), 0, 0, nil)) // nobody has said who this is
+	assert.Equal(t, []string{"id-anna"}, g.Snapshot().Accounts, "between rounds too")
+
+	g.Start()
+	ben := joined(g, "ben")
+	assert.Equal(t, []string{"id-anna", "id-ben"}, g.Snapshot().Accounts)
+	g.RemovePlayer(ben)
+	assert.Equal(t, []string{"id-anna"}, g.Snapshot().Accounts, "who left is not here, though still in the round's report")
+}

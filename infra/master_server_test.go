@@ -70,6 +70,11 @@ func (m *recordingMaster) handle(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"error":"register again"}`))
 			return
 		}
+		if accounts, _ := body["accounts"].([]any); len(accounts) > 1 {
+			// the second account plays on another server already
+			w.Write([]byte(`{"kick":["` + accounts[1].(string) + `"]}`))
+			return
+		}
 		w.WriteHeader(http.StatusNoContent)
 	case r.Method == http.MethodDelete && r.URL.Path == "/api/game/servers/s_one":
 		w.WriteHeader(http.StatusNoContent)
@@ -79,6 +84,9 @@ func (m *recordingMaster) handle(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"playerId":"p_anna","name":"anna","guest":false}`))
 		case "visitor":
 			w.Write([]byte(`{"playerId":"","name":"visitor","guest":true}`))
+		case "pz_elsewhere":
+			w.WriteHeader(http.StatusConflict)
+			w.Write([]byte(`{"error":"This account is in a match on another server.","reason":"elsewhere"}`))
 		default:
 			w.WriteHeader(http.StatusUnauthorized)
 			w.Write([]byte(`{"error":"sign in again"}`))
@@ -285,7 +293,8 @@ func TestPlayerIsWhoTheMasterSaysTheTokenBelongsTo(t *testing.T) {
 	seen := m.seen()
 	assert.Equal(t, "POST /api/game/authorize", seen[0].method+" "+seen[0].path)
 	assert.Equal(t, "the-key", seen[0].key)
-	assert.Equal(t, map[string]any{"token": "pz_session"}, seen[0].body)
+	// not registered yet: no server id to give
+	assert.Equal(t, map[string]any{"token": "pz_session", "serverId": ""}, seen[0].body)
 }
 
 func TestPlayerTheMasterTurnsAwayIsNotAuthorized(t *testing.T) {
@@ -350,4 +359,41 @@ func TestRegistrationTheMasterRefusesSaysWhyInTheLog(t *testing.T) {
 	c.Init("game.example:9090")
 	assert.Contains(t, logged.String(), "a server needs a name of 1 to 80 characters (SERVER_NAME)")
 	assert.Contains(t, logged.String(), "400")
+}
+
+// ---- one match per account ----------------------------------------------------------
+
+func TestMasterIsToldWhichServerAsksAndWhichAccountsAreOnIt(t *testing.T) {
+	m := newRecordingMaster(t)
+	c := client(m)
+	c.Init("game.example:9090")
+	_, _, err := c.AuthorizePlayer("pz_session")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]any{"token": "pz_session", "serverId": "s_one"}, m.seen()[1].body)
+
+	snapshot := round(1, true)
+	snapshot.Accounts = []string{"p_anna"}
+	assert.Empty(t, c.SendHeartbeat(snapshot))
+	assert.Equal(t, []any{"p_anna"}, m.seen()[2].body["accounts"])
+
+	// nobody with an account: an empty list, not none
+	assert.Empty(t, c.SendHeartbeat(round(1, true)))
+	assert.Equal(t, []any{}, m.seen()[3].body["accounts"])
+}
+
+func TestAccountThatPlaysElsewhereIsNotLetIn(t *testing.T) {
+	m := newRecordingMaster(t)
+	c := client(m)
+	_, _, err := c.AuthorizePlayer("pz_elsewhere")
+	assert.ErrorIs(t, err, model.ErrPlayingElsewhere)
+	assert.NotErrorIs(t, err, ErrNotAuthorized)
+}
+
+func TestHeartbeatBringsBackWhomToDrop(t *testing.T) {
+	m := newRecordingMaster(t)
+	c := client(m)
+	c.Init("game.example:9090")
+	snapshot := round(1, true)
+	snapshot.Accounts = []string{"p_anna", "p_ben"}
+	assert.Equal(t, []string{"p_ben"}, c.SendHeartbeat(snapshot))
 }

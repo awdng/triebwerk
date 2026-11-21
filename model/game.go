@@ -281,6 +281,9 @@ type StateSnapshot struct {
 	Length time.Duration
 	// Players are the participants of the round by slot, also those who left
 	Players []PlayerSnapshot
+	// Accounts are the ids of the accounts that are on the server right now,
+	// in a round or between two: the master keeps an account to one match
+	Accounts []string
 }
 
 // roundTicks is how long the round has lasted, or lasted if it is over
@@ -352,6 +355,17 @@ func (g *GameState) Snapshot() StateSnapshot {
 		}
 	}
 	sort.Slice(snapshot.Players, func(i, j int) bool { return snapshot.Players[i].Slot < snapshot.Players[j].Slot })
+	here := make([]*Player, 0, len(g.players))
+	for _, p := range g.players {
+		if p.GlobalID != "" {
+			here = append(here, p)
+		}
+	}
+	sort.Slice(here, func(i, j int) bool { return here[i].ID < here[j].ID })
+	snapshot.Accounts = make([]string, 0, len(here))
+	for _, p := range here {
+		snapshot.Accounts = append(snapshot.Accounts, p.GlobalID)
+	}
 	if len(snapshot.Players) > MaxRoundReport {
 		snapshot.Players = snapshot.Players[len(snapshot.Players)-MaxRoundReport:]
 	}

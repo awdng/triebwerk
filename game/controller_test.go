@@ -3,6 +3,7 @@ package game
 import (
 	"io"
 	"math"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -175,15 +176,21 @@ func (t *testTransport) Unregister(conn model.Connection)              { t.unreg
 
 type testMaster struct{}
 
-func (testMaster) Init(string)                       {}
-func (testMaster) SendHeartbeat(model.StateSnapshot) {}
-func (testMaster) EndGame(model.StateSnapshot)       {}
+func (testMaster) Init(string)                                {}
+func (testMaster) SendHeartbeat(model.StateSnapshot) []string { return nil }
+func (testMaster) EndGame(model.StateSnapshot)                {}
 func (testMaster) AuthorizePlayer(token string) (string, string, error) {
 	if token == "" {
 		return "", "", assert.AnError
 	}
 	if token == "pz_expired" {
 		return "", "", model.ErrNotAuthorized
+	}
+	if token == "pz_elsewhere" {
+		return "", "", model.ErrPlayingElsewhere
+	}
+	if strings.HasPrefix(token, "guest-") {
+		return "", token, nil
 	}
 	return "id-" + token, token, nil
 }
@@ -654,7 +661,7 @@ func TestEndOfARoundIsReportedToTheMasterServerWithEverybodyWhoTookPart(t *testi
 // master says no, the client is told why before it is closed: it has to
 // sign in again, or to wait for a master that is down
 func TestPlayerTheMasterTurnsAwayIsToldWhy(t *testing.T) {
-	for token, reason := range map[string]byte{"pz_expired": protocol.DeniedNotAuthorized, "": protocol.DeniedNoMaster} {
+	for token, reason := range map[string]byte{"pz_expired": protocol.DeniedNotAuthorized, "": protocol.DeniedNoMaster, "pz_elsewhere": protocol.DeniedElsewhere} {
 		s := newTestServer(t, 12)
 		conn := s.connect("somebody")
 		conn.send(protocol.EncodeHello(token))
@@ -694,4 +701,70 @@ func TestSpectatorsAreShownEveryTick(t *testing.T) {
 		assert.Equal(t, spectators.ticks[i-1]+1, spectators.ticks[i])
 	}
 	assert.Equal(t, s.controller.state.TickNumber(), spectators.ticks[7], "the state after the tick, not before")
+}
+
+// ---- one match per account ----------------------------------------------------------
+
+// Two windows of one account on one server would be two tanks for the same
+// scores. The one that joins last plays; the other is told why it is out.
+// A reload is the same thing with a first window that is gone already.
+func TestSecondConnectionOfAnAccountTakesThePlaceOfTheFirst(t *testing.T) {
+	s := newTestServer(t, 12)
+	first, firstID := s.join("anna")
+	s.named(firstID)
+	second, secondID := s.join("anna")
+	s.named(secondID)
+	s.tick()
+
+	assert.Equal(t, []byte{protocol.Denied, protocol.DeniedReplaced}, first.read(protocol.Denied))
+	assert.True(t, first.isClosed())
+	s.tick()
+	assert.Equal(t, 1, s.controller.state.GetPlayerCount())
+	assert.Equal(t, secondID, s.controller.state.GetPlayers()[0].ID)
+	assert.False(t, second.nothing(), "the second window plays on")
+	assert.Equal(t, []string{"id-anna"}, s.controller.latestSnapshot().Accounts)
+}
+
+func TestGuestsOfTheSameNameAreLeftAlone(t *testing.T) {
+	s := newTestServer(t, 12)
+	_, firstID := s.join("guest-rosa")
+	s.named(firstID)
+	_, secondID := s.join("guest-rosa")
+	s.named(secondID)
+	s.ticks(3)
+	assert.Equal(t, 2, s.controller.state.GetPlayerCount(), "a guest has no account that could be here twice")
+}
+
+// the master found the account on another server as well
+func TestAccountTheMasterSaysToDropIsToldWhyAndClosed(t *testing.T) {
+	s := newTestServer(t, 12)
+	anna, annaID := s.join("anna")
+	_, benID := s.join("ben")
+	s.named(annaID)
+	s.named(benID)
+	s.controller.dropAccounts([]string{"id-anna", "id-nobody"})
+	s.tick()
+	assert.Equal(t, []byte{protocol.Denied, protocol.DeniedElsewhere}, anna.read(protocol.Denied))
+	assert.True(t, anna.isClosed())
+	s.tick()
+	assert.Equal(t, 1, s.controller.state.GetPlayerCount())
+}
+
+// Who leaves may want to play elsewhere. The master is told at once that
+// the account is free, not with the next heartbeat seconds later.
+func TestMasterHearsAtOnceWhenAnAccountLeaves(t *testing.T) {
+	s := newTestServer(t, 12)
+	guest, guestID := s.join("guest-rosa")
+	s.named(guestID)
+	s.controller.UnregisterPlayer(guest)
+	s.tick()
+	assert.False(t, s.controller.reportWanted(), "a guest is nobody the master keeps track of")
+
+	anna, annaID := s.join("anna")
+	s.named(annaID)
+	assert.False(t, s.controller.reportWanted())
+	s.controller.UnregisterPlayer(anna)
+	s.tick()
+	assert.True(t, s.controller.reportWanted())
+	assert.False(t, s.controller.reportWanted(), "asked for once")
 }
