@@ -13,9 +13,9 @@ import (
 
 // Config of a load test run
 type Config struct {
-	// Address of the server: ws://localhost:9090/echo for its websocket,
-	// https://localhost:9090/wt for WebTransport (the certificate is not
-	// checked, the bots are a test tool)
+	// Address of the server: ws://localhost:9090/echo for its websocket
+	// (wss:// with TLS), https://localhost:9090/wt for WebTransport. The
+	// certificate is not checked, the bots are a test tool.
 	URL     string
 	Players int
 	// number of the first player's name (load-00), for two runs against one server

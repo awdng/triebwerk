@@ -196,8 +196,8 @@ func TestSnapshotStaysInOneDatagram(t *testing.T) {
 		players[i] = player(i, 0, 0, 0, 0, 100, 0)
 	}
 	data := p.Snapshot(1, 1, 0, p.SnapshotBody(players))
-	// a QUIC datagram carries about 1200 bytes
-	assert.LessOrEqual(t, len(data), 1200)
+	// a QUIC packet carries about 1200 bytes, some of them are its own
+	assert.LessOrEqual(t, len(data), 1100)
 	snapshot, ok := DecodeSnapshot(data)
 	assert.True(t, ok)
 	assert.Equal(t, MaxSnapshotPlayers, len(snapshot.Players))

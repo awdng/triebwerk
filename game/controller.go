@@ -17,10 +17,6 @@ const intermission = 10 * time.Second
 // is found much earlier by the pings of the network manager.
 const helloTimeoutTicks = 30000 / model.TickMillis
 
-var numMeasurements int64
-var totalMeasurement int64
-var avgTickTime float64
-
 // events that are created outside of the game loop and processed inside of it
 type joinEvent struct {
 	conn model.Connection
@@ -59,6 +55,11 @@ type Controller struct {
 
 	snapshotMutex sync.Mutex
 	snapshot      model.StateSnapshot
+
+	// how long ticks take: their number and the sum in nanoseconds, kept by
+	// the game loop
+	ticksMeasured int64
+	tickTimeTotal int64
 }
 
 type waitingClient struct {
@@ -334,10 +335,8 @@ func (g *Controller) gameLoop() {
 		start := time.Now()
 		g.tick(start)
 
-		// measure average tick time
-		numMeasurements++
-		totalMeasurement += time.Now().UTC().UnixNano() - start.UTC().UnixNano()
-		avgTickTime = float64(totalMeasurement/numMeasurements) / 1000 / 1000
+		g.ticksMeasured++
+		g.tickTimeTotal += int64(time.Since(start))
 	}
 }
 

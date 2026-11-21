@@ -41,7 +41,12 @@ type webSocketConn struct {
 }
 
 func dialWebSocket(url string) (conn, error) {
-	socket, _, err := websocket.DefaultDialer.Dial(url, nil)
+	// wss: the certificate is not checked, like for WebTransport
+	dialer := websocket.Dialer{
+		HandshakeTimeout: 5 * time.Second,
+		TLSClientConfig:  &tls.Config{InsecureSkipVerify: true},
+	}
+	socket, _, err := dialer.Dial(url, nil)
 	if err != nil {
 		return nil, err
 	}

@@ -272,6 +272,8 @@ func (t *Transport) serveSessions(udp net.PacketConn, tlsConf *tls.Config) *webt
 		}
 		t.register(newSessionConnection(session))
 	})
+	// a browser that already talks HTTP/3 to this server asks here
+	mux.HandleFunc(offerPath, t.serveOffer)
 	go func() {
 		if err := server.Serve(udp); err != nil && err != http.ErrServerClosed {
 			log.Printf("WebTransport: %s", err)

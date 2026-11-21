@@ -52,6 +52,12 @@ test-unit: ## Execute unit tests and the in-process 12 player load test
 test-short: ## Execute unit tests without the load test
 	$(GOTEST) -short $(GOPACKAGES)
 
+# The race detector needs a C compiler. A machine without one that has
+# Docker can run the tests in a Go image; modules and the pinned toolchain
+# come from this machine's module cache.
+test-docker: ## The race tests of `make test` in a Go container, for machines without a C compiler
+	./scripts/test-docker.sh
+
 wasm: ## Build the client simulation (cmd/wasm) into the client
 	GOOS=js GOARCH=wasm $(GO) build -o ../client/public/game/tanks.wasm ./cmd/wasm
 
@@ -94,4 +100,4 @@ clean: ## Cleanup runtime files
 clean-all: clean ## Cleanup ALL runtime files
 	rm -rf triebwerk
 
-.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit test-short wasm integration-test cover cover-html build build-static loadtest loadtest-check loadtest-check-webtransport qa clean clean-all
+.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit test-short test-docker wasm integration-test cover cover-html build build-static loadtest loadtest-check loadtest-check-webtransport qa clean clean-all

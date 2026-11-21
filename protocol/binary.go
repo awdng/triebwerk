@@ -87,8 +87,9 @@ const (
 	// SnapshotEntrySize is the size of one tank in a snapshot
 	SnapshotEntrySize = 19
 	snapshotHeader    = 11
-	// a snapshot has to fit into one datagram of about 1200 bytes
-	maxDatagram = 1200
+	// A snapshot has to fit into one datagram. A QUIC packet carries about
+	// 1200 bytes, some of them are its own.
+	maxDatagram = 1100
 	// MaxSnapshotPlayers is how many tanks fit into one snapshot
 	MaxSnapshotPlayers = (maxDatagram - snapshotHeader) / SnapshotEntrySize
 	// names on the scoreboard are cut to this many bytes

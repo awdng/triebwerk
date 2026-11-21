@@ -4,10 +4,22 @@
 # production build of ../client, all from the working copies on disk.
 # Ctrl-C stops everything.
 #
+# With a certificate for this machine's name in the tailnet everything is
+# served over https and the game server offers WebTransport (UDP on the game
+# port) next to its WebSocket. Tailscale hands out such certificates
+# (`tailscale cert`) when HTTPS is enabled for the tailnet. They come from
+# Let's Encrypt, which lists every certificate in public logs: the machine's
+# tailnet name becomes public with the first one. Without a certificate the
+# game is served over http by IP address, with the WebSocket only.
+#
 # Settings (environment):
-#   QA_HOST      address in the printed URLs   default: this machine's Tailscale IPv4
+#   QA_TLS       auto: https if Tailscale gives a certificate, off: http    auto
+#   QA_CERT, QA_KEY  certificate files to use instead of asking Tailscale;
+#                QA_HOST has to be the name they are for
+#   QA_HOST      address in the printed URLs   default: the tailnet name with
+#                a certificate, else this machine's Tailscale IPv4
 #   CLIENT_PORT  browser client                38080
-#   GAME_PORT    game server (WebSocket)       39090
+#   GAME_PORT    game server (WebSocket, and WebTransport over UDP)  39090
 #   VIEW_PORT    live view of the bots         38090
 #   MASTER_PORT  fake master server, local     38081
 #   BOTS         simulated players, 0 for none 2
@@ -25,15 +37,52 @@ game_port=${GAME_PORT:-39090}
 view_port=${VIEW_PORT:-38090}
 master_port=${MASTER_PORT:-38081}
 bots=${BOTS:-2}
-host=${QA_HOST:-$(tailscale ip -4 2>/dev/null | head -n 1)}
-if [ -z "$host" ]; then
-  echo "no Tailscale IPv4 address found (tailscale ip -4), set QA_HOST to the address to use" >&2
-  exit 1
-fi
+tls=${QA_TLS:-auto}
+cert=${QA_CERT:-}
+key=${QA_KEY:-}
+host=${QA_HOST:-}
 
 # logs, binaries and the client build; kept after exit for a look at the logs
 work=${TMPDIR:-/tmp}/panzr-qa
 mkdir -p "$work/bin"
+
+# the name Tailscale can get a certificate for, empty if there is none
+tailnet_name() {
+  tailscale status --json 2>/dev/null \
+    | sed -n '/"CertDomains"/,/\]/{/CertDomains/d;s/^ *"\([^"]*\)".*/\1/p;}' | head -n 1
+}
+
+if [ "$tls" != off ] && [ -z "$cert" ]; then
+  name=$(tailnet_name)
+  if [ -n "$name" ] && { [ -z "$host" ] || [ "$host" = "$name" ]; }; then
+    mkdir -p "$work/tls"
+    chmod 700 "$work/tls"
+    echo "asking Tailscale for the certificate of $name (certificates are listed in public logs; QA_TLS=off does without)"
+    if tailscale cert --cert-file "$work/tls/$name.crt" --key-file "$work/tls/$name.key" "$name" > "$work/tailscale-cert.log" 2>&1; then
+      cert="$work/tls/$name.crt"
+      key="$work/tls/$name.key"
+      host=$name
+    else
+      echo "no certificate from Tailscale, going on without https:" >&2
+      sed 's/^/  /' "$work/tailscale-cert.log" >&2
+    fi
+  fi
+fi
+if [ -n "$cert" ] && { [ ! -r "$cert" ] || [ ! -r "$key" ]; }; then
+  echo "can not read the certificate files QA_CERT=$cert QA_KEY=$key" >&2
+  exit 1
+fi
+if [ -n "$cert" ] && [ -z "$host" ]; then
+  echo "QA_CERT needs QA_HOST: the name the certificate is for" >&2
+  exit 1
+fi
+
+host=${host:-$(tailscale ip -4 2>/dev/null | head -n 1)}
+if [ -z "$host" ]; then
+  echo "no Tailscale IPv4 address found (tailscale ip -4), set QA_HOST to the address to use" >&2
+  exit 1
+fi
+if [ -n "$cert" ]; then scheme=https; socket=wss; else scheme=http; socket=ws; fi
 
 port_open() {
   (exec 3<>"/dev/tcp/127.0.0.1/$1") 2>/dev/null
@@ -91,30 +140,47 @@ start() { # name, command...
 start fakemaster "$work/bin/fakemaster" -addr "127.0.0.1:$master_port"
 wait_for_port "$master_port" "${pids[fakemaster]}" fakemaster
 
+# with a certificate the server speaks TLS and offers WebTransport
 start server env PUBLIC_IP="$host" PORT="$game_port" REGION=EU MASTERSERVER_GRPC="127.0.0.1:$master_port" \
-  GAME_LENGTH="${GAME_LENGTH:-300}" MAX_PLAYERS=12 "$work/bin/server"
+  GAME_LENGTH="${GAME_LENGTH:-300}" MAX_PLAYERS=12 TLS_CERT="$cert" TLS_KEY="$key" "$work/bin/server"
 wait_for_port "$game_port" "${pids[server]}" server
 
 if [ "$bots" -gt 0 ]; then
-  start bots "$work/bin/loadtest" -n "$bots" -url "ws://127.0.0.1:$game_port/echo" -view ":$view_port"
+  start bots "$work/bin/loadtest" -n "$bots" -url "$socket://127.0.0.1:$game_port/echo" -view ":$view_port"
   wait_for_port "$view_port" "${pids[bots]}" bots
 fi
 
-start client "$vite" preview "$client_dir" --outDir "$work/dist" --host 0.0.0.0 --port "$client_port" --strictPort
+start client env PREVIEW_TLS_CERT="$cert" PREVIEW_TLS_KEY="$key" PREVIEW_HOST="$host" \
+  "$vite" preview "$client_dir" --outDir "$work/dist" --host 0.0.0.0 --port "$client_port" --strictPort
 wait_for_port "$client_port" "${pids[client]}" client
 
 cat <<EOF
 
 QA environment is running, open on your desktop:
 
-  game        http://$host:$client_port/?server=$host:$game_port&name=desktop
-              (or http://$host:$client_port and connect to $host:$game_port)
+  game        $scheme://$host:$client_port/?server=$host:$game_port&name=desktop
+              (or $scheme://$host:$client_port and connect to $host:$game_port)
 EOF
 [ "$bots" -gt 0 ] && echo "  bots view   http://$host:$view_port   ($bots simulated players)"
 cat <<EOF
 
-  Every browser window is one player. Add &latency=100&jitter=40 to the game
-  URL to simulate a slower network. Rounds last ${GAME_LENGTH:-300}s.
+  Every browser window is one player. Add &latency=100&jitter=40&loss=5 to
+  the game URL to simulate a worse network, &net to see what the netcode
+  measures. Rounds last ${GAME_LENGTH:-300}s.
+EOF
+if [ -n "$cert" ]; then
+  cat <<EOF
+  The game connects over WebTransport (UDP port $game_port) and falls back to
+  the WebSocket (TCP) when that does not get through, e.g. a firewall that
+  lets only TCP pass; &net shows which one it is.
+EOF
+else
+  cat <<EOF
+  Without https the game connects over the WebSocket only; WebTransport
+  needs a certificate, see the top of $0.
+EOF
+fi
+cat <<EOF
   Logs: $work/*.log    Ctrl-C stops everything.
 EOF
 

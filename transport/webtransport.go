@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"sync/atomic"
 	"time"
 
+	"github.com/quic-go/quic-go"
 	"github.com/quic-go/webtransport-go"
 )
 
@@ -33,18 +35,19 @@ type sessionConnection struct {
 	writeMutex  sync.Mutex
 	writeWait   time.Duration
 
-	maxMessageSize int64
+	// set by the goroutine that reads messages, used by the one that reads the stream
+	maxMessageSize atomic.Int64
 	closeOnce      sync.Once
 }
 
 func newSessionConnection(session *webtransport.Session) *sessionConnection {
 	c := &sessionConnection{
-		session:        session,
-		inbox:          make(chan []byte, sessionInbox),
-		streamReady:    make(chan struct{}),
-		writeWait:      time.Second,
-		maxMessageSize: 1024,
+		session:     session,
+		inbox:       make(chan []byte, sessionInbox),
+		streamReady: make(chan struct{}),
+		writeWait:   time.Second,
 	}
+	c.maxMessageSize.Store(1024)
 	go c.readDatagrams()
 	go c.readStream()
 	return c
@@ -83,7 +86,7 @@ func (c *sessionConnection) readStream() {
 			return
 		}
 		length := int64(binary.LittleEndian.Uint16(header))
-		if length > c.maxMessageSize {
+		if length > c.maxMessageSize.Load() {
 			c.fail(errMessageTooLong)
 			return
 		}
@@ -110,7 +113,7 @@ func (c *sessionConnection) fail(err error) {
 // PrepareRead sets the longest message a client may send. A client that is
 // gone is noticed by the session itself (see sessionIdleTimeout).
 func (c *sessionConnection) PrepareRead(maxMessageSize int64, pongWait time.Duration) {
-	c.maxMessageSize = maxMessageSize
+	c.maxMessageSize.Store(maxMessageSize)
 }
 
 // Read returns the next message of either lane
@@ -136,10 +139,14 @@ func (c *sessionConnection) Write(data []byte) error {
 	// the client opens the stream; it has, if it said hello
 	select {
 	case <-c.streamReady:
-	case <-c.session.Context().Done():
-		return context.Cause(c.session.Context())
-	case <-time.After(c.writeWait):
-		return errors.New("the client has not opened the reliable stream")
+	default:
+		select {
+		case <-c.streamReady:
+		case <-c.session.Context().Done():
+			return context.Cause(c.session.Context())
+		case <-time.After(c.writeWait):
+			return errors.New("the client has not opened the reliable stream")
+		}
 	}
 	framed := make([]byte, 2+len(data))
 	binary.LittleEndian.PutUint16(framed, uint16(len(data)))
@@ -152,13 +159,20 @@ func (c *sessionConnection) Write(data []byte) error {
 }
 
 // WriteUnreliable sends a message as a datagram. One that can not be sent
-// now is lost; the next snapshot replaces it.
+// now is lost; the next snapshot replaces it. One that is too large for a
+// packet would be lost every time: it goes over the stream instead.
 func (c *sessionConnection) WriteUnreliable(data []byte) error {
-	if err := c.session.SendDatagram(data); err != nil {
-		// only a session that is gone is an error for the caller
-		if c.session.Context().Err() != nil {
-			return context.Cause(c.session.Context())
-		}
+	err := c.session.SendDatagram(data)
+	if err == nil {
+		return nil
+	}
+	var tooLarge *quic.DatagramTooLargeError
+	if errors.As(err, &tooLarge) {
+		return c.Write(data)
+	}
+	// only a session that is gone is an error for the caller
+	if c.session.Context().Err() != nil {
+		return context.Cause(c.session.Context())
 	}
 	return nil
 }

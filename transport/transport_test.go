@@ -357,3 +357,34 @@ func TestConfiguredPortThatIsTakenOnUDPIsAnError(t *testing.T) {
 	require.NoError(t, err)
 	listener.Close()
 }
+
+// A datagram is one packet. What does not fit into one still has to arrive:
+// a snapshot of a very full server goes over the stream instead.
+func TestWebTransportSendsWhatIsTooLargeForADatagramOnTheStream(t *testing.T) {
+	s := start(t, Config{Address: "localhost", SelfSigned: true})
+	_, stream := dial(t, s.port)
+	conn := s.accept()
+	// the client has opened its stream when its first message is there
+	_, err := stream.Write(frame([]byte{1, 2}))
+	require.NoError(t, err)
+	_, err = conn.Read()
+	require.NoError(t, err)
+
+	large := make([]byte, 3000)
+	large[0] = 17
+	conn.PrepareWrite(time.Second)
+	require.NoError(t, conn.WriteUnreliable(large))
+	assert.Equal(t, large, readFrame(t, stream))
+}
+
+// A browser that already talks HTTP/3 to the server asks there as well.
+func TestOfferIsAnsweredOverHTTP3Too(t *testing.T) {
+	s := start(t, Config{Address: "localhost", SelfSigned: true})
+	roundTripper := &http3.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, NextProtos: []string{http3.NextProtoH3}}}
+	defer roundTripper.Close()
+	o, header := fetchOffer(t, &http.Client{Transport: roundTripper, Timeout: 5 * time.Second}, "https://localhost:"+s.port+"/transport")
+	require.NotNil(t, o.WebTransport)
+	assert.Equal(t, "/wt", o.WebTransport.Path)
+	assert.NotEmpty(t, o.WebTransport.CertHash)
+	assert.Equal(t, "*", header.Get("Access-Control-Allow-Origin"))
+}

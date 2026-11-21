@@ -2,6 +2,7 @@ package game
 
 import (
 	"io"
+	"math"
 	"sync"
 	"testing"
 	"time"
@@ -204,6 +205,14 @@ func newTestServer(t *testing.T, maxPlayers int) *testServer {
 func (s *testServer) tick() {
 	s.now = s.now.Add(model.TickMillis * time.Millisecond)
 	s.controller.tick(s.now)
+	// Ticks follow each other without the 33 ms of the real server. The
+	// goroutines that write to the clients get the time they need here, or
+	// the server would take a full buffer for a client that does not read.
+	for _, p := range s.controller.state.GetPlayers() {
+		for deadline := time.Now().Add(time.Second); len(p.Client.NetworkOut) > 20 && time.Now().Before(deadline); {
+			time.Sleep(20 * time.Microsecond)
+		}
+	}
 }
 
 func (s *testServer) ticks(count int) {
@@ -374,6 +383,8 @@ func TestSnapshotSaysWhichInputItContains(t *testing.T) {
 	s := newTestServer(t, 12)
 	conn, id := s.join("anna")
 	tank := s.player(id).Collider
+	// on open ground, spawn points can face a wall
+	tank.SetPose(-128, 28, 0, 0)
 	x, y := tank.Pivot.X, tank.Pivot.Y
 
 	conn.send(keys(1, protocol.BitForward))
@@ -437,6 +448,42 @@ func TestEveryClientGetsItsOwnAcknowledgement(t *testing.T) {
 	assert.Equal(t, forAnna.Players, forBen.Players, "both see the same world")
 	assert.Len(t, forAnna.Players, 2)
 	assert.Less(t, forAnna.Players[0].ID, forAnna.Players[1].ID, "tanks come in the order of their ids")
+}
+
+// A client can send as much and as fast as it likes: the server keeps the
+// newest few inputs, applies one per tick and stays responsive for the rest.
+func TestFloodOfInputsMovesATankNoFasterAndBlocksNobody(t *testing.T) {
+	s := newTestServer(t, 12)
+	flood, floodID := s.join("flood")
+	calm, calmID := s.join("calm")
+	flood.snapshot()
+	flood.snapshot()
+	// on open ground, away from each other (spawn points can face a wall)
+	s.player(floodID).Collider.SetPose(-128, 28, 0, 0)
+	s.player(calmID).Collider.SetPose(-128, 90, 0, 0)
+	before := *s.player(floodID).Collider.Pivot
+
+	// a thousand inputs and some garbage in one tick
+	for sequence := uint32(1); sequence <= 1000; sequence++ {
+		flood.send(keys(sequence, protocol.BitForward, protocol.BitForward, protocol.BitForward))
+		if sequence%100 == 0 {
+			flood.send([]byte{protocol.Input, 0xff, 0xff, 0xff, 0xff, 3, 1, 1, 1})
+			flood.send([]byte{250, 1, 2, 3})
+		}
+	}
+	calm.send(keys(1, protocol.BitForward))
+	s.tick()
+
+	snapshot := flood.snapshot()
+	assert.LessOrEqual(t, snapshot.Waiting, uint8(model.InputQueueCapacity))
+	moved := s.player(floodID).Collider.Pivot
+	// one step of 0.495 units, the flood bought nothing
+	assert.InDelta(t, 0.495, math.Hypot(float64(moved.X-before.X), float64(moved.Y-before.Y)), 1e-3)
+	assert.Equal(t, uint32(1), calm.snapshot().Ack, "the other player is served as always")
+
+	// the flood is not kept for later: a second afterwards the queue is empty
+	s.ticks(40)
+	assert.Equal(t, 0, s.player(floodID).Inputs.Waiting())
 }
 
 func TestMessagesThatMakeNoSenseAreIgnored(t *testing.T) {
