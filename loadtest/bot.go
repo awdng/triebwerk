@@ -50,6 +50,8 @@ func (s *Stats) recordGap(gap time.Duration) {
 // Bot is one simulated player
 type Bot struct {
 	Name string
+	// what the bot says hello with, see hello
+	token string
 
 	url   string
 	rng   *rand.Rand
@@ -73,8 +75,13 @@ type Bot struct {
 
 func newBot(id int, cfg *Config, stats *Stats) *Bot {
 	name := fmt.Sprintf("load-%02d", cfg.FirstName+id)
+	token := name
+	if id < len(cfg.Tokens) {
+		token = cfg.Tokens[id]
+	}
 	return &Bot{
 		Name:      name,
+		token:     token,
 		url:       cfg.URL,
 		rng:       rand.New(rand.NewSource(time.Now().UnixNano() + int64(id))),
 		stats:     stats,
@@ -83,6 +90,12 @@ func newBot(id int, cfg *Config, stats *Stats) *Bot {
 		report:    BotReport{Name: name},
 		lastShots: -1,
 	}
+}
+
+// hello is what the bot tells the server it is: the token of an account,
+// or its name as a guest
+func (b *Bot) hello() string {
+	return b.token
 }
 
 // Keys returns the player id on the server and the currently pressed keys
@@ -143,7 +156,7 @@ func (b *Bot) play(until time.Time) {
 	defer atomic.AddInt64(&b.stats.Connected, -1)
 
 	// the name is the auth token, the fake master server uses it as nickname
-	c.Send(protocol.EncodeHello(b.Name))
+	c.Send(protocol.EncodeHello(b.hello()))
 
 	done := make(chan struct{})
 	defer close(done)

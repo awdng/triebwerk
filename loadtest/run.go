@@ -20,6 +20,9 @@ type Config struct {
 	Players int
 	// number of the first player's name (load-00), for two runs against one server
 	FirstName int
+	// Tokens of accounts on the master server: the first players say hello
+	// with one each and play as that account, the others are guests
+	Tokens []string
 	// how long every player stays, 0 runs until the context is cancelled
 	Duration time.Duration
 	// players that leave once after ReconnectAfter and rejoin 5 seconds later
