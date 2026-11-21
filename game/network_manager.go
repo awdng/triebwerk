@@ -33,6 +33,8 @@ const (
 	serverTime
 	gameStart
 	gameEnd
+	scoreboard
+	kill
 )
 
 // Protocol that encodes/decodes data for network transfer
@@ -222,6 +224,22 @@ func (n *NetworkManager) SendGameStartToClient(client *model.Client, state *mode
 	if len(buf) > 0 {
 		n.Send(client, buf)
 	}
+}
+
+// BroadcastScoreboard tells every client the names, kills and deaths of all players
+func (n *NetworkManager) BroadcastScoreboard(state *model.GameState) {
+	n.broadcast <- n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
+		MessageType: uint8(scoreboard),
+		Body:        state.Scoreboard(),
+	})
+}
+
+// BroadcastKill tells every client who destroyed whom
+func (n *NetworkManager) BroadcastKill(state *model.GameState, killer int, victim int) {
+	n.broadcast <- n.protocol.Encode(0, state.GameTime(), &model.NetworkMessage{
+		MessageType: uint8(kill),
+		Body:        model.Kill{Killer: killer, Victim: victim},
+	})
 }
 
 // BroadcastGameEnd ...

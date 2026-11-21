@@ -43,6 +43,9 @@ type Controller struct {
 	masterServer   MasterServerClient
 	maxPlayers     int
 	nextStart      time.Time
+	// the scoreboard is sent when it changed and once a second anyway
+	scoreboardDirty bool
+	scoreboardSent  time.Time
 
 	eventMutex sync.Mutex
 	events     []interface{}
@@ -158,6 +161,7 @@ func (g *Controller) addPlayer(conn model.Connection) {
 	if g.state.InProgress() { // game already started, new Player has to know about it
 		g.networkManager.SendGameStartToClient(player.Client, g.state)
 	}
+	g.scoreboardDirty = true
 	log.Printf("GameManager: Player %d connected, %d connected Players", player.ID, g.state.GetPlayerCount())
 }
 
@@ -165,6 +169,7 @@ func (g *Controller) removePlayer(conn model.Connection) {
 	for _, p := range g.state.GetPlayers() {
 		if p.Client.Connection == conn {
 			g.state.RemovePlayer(p)
+			g.scoreboardDirty = true
 			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.GetPlayerCount())
 			return
 		}
@@ -191,6 +196,7 @@ func (g *Controller) finishAuthorization(e authEvent) {
 	}
 	p.GlobalID = e.globalID
 	p.Nickname = e.nickname
+	g.scoreboardDirty = true
 	log.Printf("GameManager: Player %d authorized successfully as GlobalID %s %s", p.ID, p.GlobalID, p.Nickname)
 }
 
@@ -229,8 +235,30 @@ func (g *Controller) processInputs(p *model.Player, players []*model.Player, tim
 	}
 }
 
+// reportKills tells the clients who was destroyed in this tick
+func (g *Controller) reportKills(players []*model.Player) {
+	for _, p := range players {
+		for _, victim := range p.TakeKills() {
+			g.networkManager.BroadcastKill(g.state, p.ID, victim)
+			g.scoreboardDirty = true
+		}
+	}
+}
+
+// sendScoreboard sends names and scores when they changed, and once a
+// second so that clients that just joined or missed one catch up
+func (g *Controller) sendScoreboard() {
+	if !g.scoreboardDirty && g.tickStart.Sub(g.scoreboardSent) < time.Second {
+		return
+	}
+	g.networkManager.BroadcastScoreboard(g.state)
+	g.scoreboardDirty = false
+	g.scoreboardSent = g.tickStart
+}
+
 func (g *Controller) startGame() {
 	g.state.Start()
+	g.scoreboardDirty = true
 	g.networkManager.BroadcastGameStart(g.state)
 	log.Printf("GameManager: Game has started")
 }
@@ -271,6 +299,8 @@ func (g *Controller) gameLoop() {
 		if g.state.InProgress() {
 			// broadcast game state to clients
 			g.networkManager.BroadcastGameState(g.state)
+			g.reportKills(players)
+			g.sendScoreboard()
 
 			if g.state.HasEnded() {
 				g.endGame()

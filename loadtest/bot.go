@@ -12,6 +12,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/gorilla/websocket"
 )
@@ -26,6 +27,9 @@ const (
 	msgTime      = 5
 	msgGameStart = 6
 	msgGameEnd   = 7
+	// names and scores of everybody, and who destroyed whom
+	msgScoreboard = 8
+	msgKill       = 9
 )
 
 // Stats are live counters shared by all bots of a run
@@ -214,7 +218,52 @@ func (b *Bot) handle(data []byte) {
 		if b.cfg.OnEvent != nil {
 			b.cfg.OnEvent("end", gameTime)
 		}
+	case msgScoreboard:
+		_, ok := parseScoreboard(data[6:])
+		b.mutex.Lock()
+		if ok {
+			b.report.Scoreboards++
+		} else {
+			b.report.BadMessages++
+		}
+		b.mutex.Unlock()
+	case msgKill:
+		b.mutex.Lock()
+		if len(data) == 8 {
+			b.report.Kills++
+		} else {
+			b.report.BadMessages++
+		}
+		b.mutex.Unlock()
 	}
+}
+
+// parseScoreboard reads the body of a scoreboard message (see
+// protocol/binary.go) into player id -> name. It is strict: every byte has
+// to be accounted for and names have to be utf8.
+func parseScoreboard(body []byte) (map[int]string, bool) {
+	if len(body) < 5 {
+		return nil, false
+	}
+	count := int(body[4])
+	players := make(map[int]string, count)
+	offset := 5
+	for i := 0; i < count; i++ {
+		if offset+6 > len(body) {
+			return nil, false
+		}
+		nameLength := int(body[offset+5])
+		if offset+6+nameLength > len(body) {
+			return nil, false
+		}
+		name := body[offset+6 : offset+6+nameLength]
+		if !utf8.Valid(name) {
+			return nil, false
+		}
+		players[int(body[offset])] = string(name)
+		offset += 6 + nameLength
+	}
+	return players, offset == len(body)
 }
 
 // recordState checks one state broadcast: timing, players, own health and shots

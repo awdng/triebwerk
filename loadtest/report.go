@@ -27,6 +27,11 @@ type BotReport struct {
 	// own deaths and shots as reported by the server
 	Deaths int
 	Shots  int
+	// scoreboards and kill events the server sent, and messages of those
+	// kinds that did not have the agreed layout
+	Scoreboards int
+	Kills       int
+	BadMessages int
 
 	lastHealth int
 }
@@ -47,6 +52,8 @@ type Report struct {
 
 // Expectations a healthy server has to meet, zero values are not checked
 type Expectations struct {
+	// Scoreboard: every player has to receive names and scores
+	Scoreboard bool
 	// all of them in one match at the same time
 	Players int
 	// rounds every player has seen end
@@ -61,6 +68,7 @@ type Expectations struct {
 func DefaultExpectations(players int) Expectations {
 	return Expectations{
 		Players:       players,
+		Scoreboard:    true,
 		MinRounds:     1,
 		MaxGap:        250 * time.Millisecond,
 		MinUpdateRate: 25,
@@ -95,6 +103,12 @@ func (r Report) Check(e Expectations) []error {
 		}
 		if e.MinUpdateRate > 0 && b.UpdateRate() < e.MinUpdateRate {
 			fail("%s received %.1f state broadcasts per second, expected at least %.0f", b.Name, b.UpdateRate(), e.MinUpdateRate)
+		}
+		if e.Scoreboard && b.Scoreboards == 0 {
+			fail("%s never received a scoreboard", b.Name)
+		}
+		if b.BadMessages > 0 {
+			fail("%s received %d messages it could not read", b.Name, b.BadMessages)
 		}
 		if b.MaxPlayersSeen > maxPlayers {
 			maxPlayers = b.MaxPlayersSeen

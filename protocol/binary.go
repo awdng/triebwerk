@@ -3,6 +3,8 @@ package protocol
 import (
 	"encoding/binary"
 	"math"
+	"strings"
+	"unicode/utf8"
 
 	"github.com/awdng/triebwerk/model"
 )
@@ -24,6 +26,8 @@ func NewBinaryProtocol() BinaryProtocol {
 	protocol.encodeHandlers[1] = encodePlayerState
 	protocol.encodeHandlers[2] = encodePlayerRegister
 	protocol.encodeHandlers[5] = encodePlayerTime
+	protocol.encodeHandlers[8] = encodeScoreboard
+	protocol.encodeHandlers[9] = encodeKill
 
 	protocol.decodeHandlers[0] = decodePlayerAuth
 	protocol.decodeHandlers[1] = decodePlayerInput
@@ -170,4 +174,64 @@ func decodePlayerTime(data []byte, message *model.NetworkMessage) {
 
 func decodePlayerAuth(data []byte, message *model.NetworkMessage) {
 	message.Body = string(data[2:])
+}
+
+// names on the scoreboard are cut to this many bytes
+const maxNameLength = 24
+
+// Scoreboard, after the header, numbers little endian:
+//
+//	uint32  length of a round in ms
+//	uint8   number of players, then per player
+//	  uint8   id
+//	  uint16  kills
+//	  uint16  deaths
+//	  uint8   length of the name in bytes, followed by the name as utf8
+//
+// The client's copy of this layout is in src/game/net/protocol.js.
+func encodeScoreboard(message *model.NetworkMessage) []byte {
+	board := message.Body.(*model.Scoreboard)
+	players := board.Players
+	if len(players) > math.MaxUint8 {
+		players = players[:math.MaxUint8]
+	}
+	buf := make([]byte, 0, 5+len(players)*(6+maxNameLength))
+	buf = binary.LittleEndian.AppendUint32(buf, uint32(board.RoundLength.Milliseconds()))
+	buf = append(buf, byte(len(players)))
+	for _, p := range players {
+		name := scoreboardName(p.Name)
+		buf = append(buf, byte(p.ID))
+		buf = binary.LittleEndian.AppendUint16(buf, clampUint16(p.Kills))
+		buf = binary.LittleEndian.AppendUint16(buf, clampUint16(p.Deaths))
+		buf = append(buf, byte(len(name)))
+		buf = append(buf, name...)
+	}
+	return buf
+}
+
+// Kill, after the header: uint8 id of the killer, uint8 id of the victim
+func encodeKill(message *model.NetworkMessage) []byte {
+	kill := message.Body.(model.Kill)
+	return []byte{byte(kill.Killer), byte(kill.Victim)}
+}
+
+// scoreboardName makes a nickname safe to send: valid utf8 of at most
+// maxNameLength bytes, cut between characters
+func scoreboardName(name string) string {
+	name = strings.ToValidUTF8(name, "")
+	for len(name) > maxNameLength {
+		_, size := utf8.DecodeLastRuneInString(name)
+		name = name[:len(name)-size]
+	}
+	return name
+}
+
+func clampUint16(value int) uint16 {
+	if value < 0 {
+		return 0
+	}
+	if value > math.MaxUint16 {
+		return math.MaxUint16
+	}
+	return uint16(value)
 }

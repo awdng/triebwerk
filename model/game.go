@@ -42,6 +42,8 @@ func (g *GameState) Start() {
 	for _, p := range players {
 		p.Health = 100
 		p.Score = 0
+		p.Deaths = 0
+		p.KillLog = nil
 		spawn := g.Map.GetRandomSpawn(players)
 		p.Collider.ChangePosition(spawn.X, spawn.Y)
 	}

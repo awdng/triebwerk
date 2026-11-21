@@ -39,7 +39,13 @@ type Player struct {
 	AuthToken string
 	Nickname  string
 	Health    int
-	Score     int
+	// Score counts the players this one destroyed in the running round
+	Score int
+	// Deaths counts how often this player was destroyed in the running round
+	Deaths int
+	// KillLog collects the ids of the players this one destroyed until the
+	// game loop reports them with TakeKills
+	KillLog []int
 	// Fired is true if a projectile was fired during the current server tick.
 	// Control.Shoot can not be used for this because it is overwritten by every processed input.
 	Fired            bool
@@ -245,4 +251,11 @@ type NetworkMessage struct {
 
 func (m NetworkMessage) String() string {
 	return fmt.Sprintf("NetworkMessage %d - %+v", m.MessageType, m.Body)
+}
+
+// TakeKills returns the ids of the players destroyed since the last call
+func (p *Player) TakeKills() []int {
+	kills := p.KillLog
+	p.KillLog = nil
+	return kills
 }
