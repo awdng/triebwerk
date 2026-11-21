@@ -24,7 +24,7 @@ jobs:
       - name: Build the wasm simulation
         run: GOOS=js GOARCH=wasm go build -o /dev/null ./cmd/wasm
 
-      # the real binaries (fake master server over gRPC, game server,
+      # the real binaries (fake master server, game server,
       # 12 simulated players) through a complete round
       - name: Load test with 12 players
         run: make loadtest-check

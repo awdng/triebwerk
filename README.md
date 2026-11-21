@@ -9,13 +9,44 @@ docker-compose up
 Run triebwerk standalone:
 cp .env.dist .env (and change env values)
 make run
-The server waits until it reaches the master server at MASTERSERVER_GRPC,
+The server waits until it reaches the master server at MASTER_URL (http://localhost:8081),
 locally start the fake one first: go run ./cmd/fakemaster -addr :8081
+
+The master server (its own repository, ../master):
+The master lists the game servers for the clients, has the accounts of the
+players and keeps the scores of every round. A game server talks to it over
+HTTP (infra/master_server.go): it registers under PUBLIC_IP:PORT with its
+name, map, player limit and protocol version, reports every five seconds who
+is online and the scores of its round (and once more when a round ends),
+asks who the token of a new player belongs to, registers again when the
+master has forgotten it, and says goodbye when it stops.
+MASTER_URL    address of the master, default http://localhost:8081
+SERVER_KEY    what the master asks game servers for, if it does
+SERVER_NAME   name in the list of servers, default "<REGION> <PUBLIC_IP>:<PORT>"
+A token that is a session of an account makes the player that account, any
+other token is the name of a guest. An account plays one match at a time:
+the master turns it away while it is in a match on another server, and on
+one server a second connection of an account takes the place of the first
+(a second window, a reload). The server tells the master at once when an
+account leaves, and drops the accounts a heartbeat's answer names. A player the master turns away is told
+why (message Denied) before the connection is closed.
+cmd/fakemaster speaks the same API, accepts every server, takes every player
+for a guest by the name given and keeps nothing: the tests and scripts of this repository need no master.
+`make stack` in ../master runs the real thing: master, several game servers,
+bots that play as accounts (cmd/loadtest -tokens).
+
+Watching a server:
+Every game server shows its match from above at http://<address>/spectate/
+(the live view of the load test, fed from the server's own state, package
+spectate): tanks and shots of every tick, who plays with which keys and
+score. With a SERVER_KEY it needs ?key=, which the admin pages of the master
+server hand out. Eight watchers at most; nobody watching costs nothing.
 
 Build triebwerk:
 make build-static
 
-GAME_LENGTH (seconds) sets the round length, useful for tests.
+GAME_LENGTH (seconds) sets the round length, 600 (ten minutes) by default;
+short rounds are useful for tests.
 
 How the server keeps time and talks to clients:
 The game moves in ticks of 33 ms. Every tick the server applies one input per

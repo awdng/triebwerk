@@ -3,6 +3,7 @@ package game
 import (
 	"io"
 	"math"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -175,13 +176,21 @@ func (t *testTransport) Unregister(conn model.Connection)              { t.unreg
 
 type testMaster struct{}
 
-func (testMaster) Init(string)                       {}
-func (testMaster) GetServerState()                   {}
-func (testMaster) SendHeartbeat(model.StateSnapshot) {}
-func (testMaster) EndGame(model.StateSnapshot)       {}
+func (testMaster) Init(string)                                {}
+func (testMaster) SendHeartbeat(model.StateSnapshot) []string { return nil }
+func (testMaster) EndGame(model.StateSnapshot)                {}
 func (testMaster) AuthorizePlayer(token string) (string, string, error) {
 	if token == "" {
 		return "", "", assert.AnError
+	}
+	if token == "pz_expired" {
+		return "", "", model.ErrNotAuthorized
+	}
+	if token == "pz_elsewhere" {
+		return "", "", model.ErrPlayingElsewhere
+	}
+	if strings.HasPrefix(token, "guest-") {
+		return "", token, nil
 	}
 	return "id-" + token, token, nil
 }
@@ -569,4 +578,193 @@ func TestRoundEndsAndTheNextOneStarts(t *testing.T) {
 	next := conn.read(protocol.RoundStart)
 	assert.Equal(t, protocol.NewBinaryProtocol().RoundStart(s.controller.state.RoundStartTick()), next)
 	assert.Greater(t, s.controller.state.RoundStartTick(), started+31)
+}
+
+// recordingMaster keeps the rounds it is told the end of
+type recordingMaster struct {
+	testMaster
+	mutex sync.Mutex
+	ended []model.StateSnapshot
+}
+
+func (m *recordingMaster) EndGame(s model.StateSnapshot) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.ended = append(m.ended, s)
+}
+
+func (m *recordingMaster) rounds() []model.StateSnapshot {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return append([]model.StateSnapshot(nil), m.ended...)
+}
+
+// named ticks until the master server has said who the player is
+func (s *testServer) named(id int) *model.Player {
+	s.t.Helper()
+	require.Eventually(s.t, func() bool {
+		s.tick()
+		return s.player(id).Nickname != ""
+	}, time.Second, time.Millisecond)
+	return s.player(id)
+}
+
+// the scores of the world are made of these reports: everybody who took
+// part is in it, also who left before the end
+func TestEndOfARoundIsReportedToTheMasterServerWithEverybodyWhoTookPart(t *testing.T) {
+	master := &recordingMaster{}
+	transport := &testTransport{}
+	network := NewNetworkManager(transport, protocol.NewBinaryProtocol())
+	controller := NewController("test", 12, 2*time.Second, network, master)
+	transport.unregister = controller.UnregisterPlayer
+	go network.run()
+	s := &testServer{t: t, controller: controller, now: time.Unix(1000, 0)}
+
+	_, annaID := s.join("anna")
+	benConn, benID := s.join("ben")
+	s.named(annaID).Score = 2
+	ben := s.named(benID)
+	ben.Score, ben.Deaths = 5, 1
+	s.controller.UnregisterPlayer(benConn)
+	s.ticks(2000/model.TickMillis + 2)
+
+	require.Eventually(t, func() bool { return len(master.rounds()) == 1 }, time.Second, time.Millisecond)
+	round := master.rounds()[0]
+	assert.Equal(t, uint32(1), round.Round)
+	assert.False(t, round.InProgress)
+	assert.Equal(t, 1, round.Online)
+	assert.InDelta(t, 2000, int(round.GameTime), 100)
+	require.Len(t, round.Players, 2)
+	assert.Equal(t, model.PlayerSnapshot{Slot: 1, GlobalID: "id-anna", Nickname: "anna", Score: 2, SecondsPlayed: 2, Connected: true}, round.Players[0])
+	assert.Equal(t, "ben", round.Players[1].Nickname)
+	assert.Equal(t, 5, round.Players[1].Score)
+	assert.Equal(t, 1, round.Players[1].Deaths)
+	assert.False(t, round.Players[1].Connected)
+
+	// the heartbeats of the pause say the same, should the report be lost
+	s.ticks(30)
+	beat := s.controller.latestSnapshot()
+	assert.Equal(t, round.Players, beat.Players)
+	assert.Equal(t, round.GameTime, beat.GameTime)
+	assert.False(t, beat.InProgress)
+
+	// and the next round starts over
+	s.ticks(int(intermission/(model.TickMillis*time.Millisecond)) + 2)
+	beat = s.controller.latestSnapshot()
+	assert.Equal(t, uint32(2), beat.Round)
+	assert.True(t, beat.InProgress)
+	require.Len(t, beat.Players, 1)
+	assert.Equal(t, 0, beat.Players[0].Score)
+}
+
+// a player is a tank before the master server has said who it is. If the
+// master says no, the client is told why before it is closed: it has to
+// sign in again, or to wait for a master that is down
+func TestPlayerTheMasterTurnsAwayIsToldWhy(t *testing.T) {
+	for token, reason := range map[string]byte{"pz_expired": protocol.DeniedNotAuthorized, "": protocol.DeniedNoMaster, "pz_elsewhere": protocol.DeniedElsewhere} {
+		s := newTestServer(t, 12)
+		conn := s.connect("somebody")
+		conn.send(protocol.EncodeHello(token))
+		s.tick()
+		conn.read(protocol.Welcome)
+		// the master is asked in the background: tick until it has answered
+		for i := 0; i < 500 && s.controller.state.GetPlayerCount() > 0; i++ {
+			time.Sleep(time.Millisecond)
+			s.tick()
+		}
+		assert.Equal(t, []byte{protocol.Denied, reason}, conn.read(protocol.Denied), "token %q", token)
+		assert.True(t, conn.isClosed())
+		s.tick()
+		assert.Equal(t, 0, s.controller.state.GetPlayerCount())
+		assert.Empty(t, s.controller.latestSnapshot().Players, "who was turned away took no part in the round")
+	}
+}
+
+type countingSpectators struct {
+	ticks []uint32
+}
+
+func (c *countingSpectators) Publish(state *model.GameState) {
+	c.ticks = append(c.ticks, state.TickNumber())
+}
+
+// who watches a server is shown the state after every tick, between rounds too
+func TestSpectatorsAreShownEveryTick(t *testing.T) {
+	s := newTestServer(t, 12)
+	spectators := &countingSpectators{}
+	s.controller.Watch(spectators)
+	s.ticks(3)
+	s.join("anna")
+	s.ticks(3)
+	require.Len(t, spectators.ticks, 8)
+	for i := 1; i < len(spectators.ticks); i++ {
+		assert.Equal(t, spectators.ticks[i-1]+1, spectators.ticks[i])
+	}
+	assert.Equal(t, s.controller.state.TickNumber(), spectators.ticks[7], "the state after the tick, not before")
+}
+
+// ---- one match per account ----------------------------------------------------------
+
+// Two windows of one account on one server would be two tanks for the same
+// scores. The one that joins last plays; the other is told why it is out.
+// A reload is the same thing with a first window that is gone already.
+func TestSecondConnectionOfAnAccountTakesThePlaceOfTheFirst(t *testing.T) {
+	s := newTestServer(t, 12)
+	first, firstID := s.join("anna")
+	s.named(firstID)
+	second, secondID := s.join("anna")
+	s.named(secondID)
+	s.tick()
+
+	assert.Equal(t, []byte{protocol.Denied, protocol.DeniedReplaced}, first.read(protocol.Denied))
+	assert.True(t, first.isClosed())
+	s.tick()
+	assert.Equal(t, 1, s.controller.state.GetPlayerCount())
+	assert.Equal(t, secondID, s.controller.state.GetPlayers()[0].ID)
+	assert.False(t, second.nothing(), "the second window plays on")
+	assert.Equal(t, []string{"id-anna"}, s.controller.latestSnapshot().Accounts)
+}
+
+func TestGuestsOfTheSameNameAreLeftAlone(t *testing.T) {
+	s := newTestServer(t, 12)
+	_, firstID := s.join("guest-rosa")
+	s.named(firstID)
+	_, secondID := s.join("guest-rosa")
+	s.named(secondID)
+	s.ticks(3)
+	assert.Equal(t, 2, s.controller.state.GetPlayerCount(), "a guest has no account that could be here twice")
+}
+
+// the master found the account on another server as well
+func TestAccountTheMasterSaysToDropIsToldWhyAndClosed(t *testing.T) {
+	s := newTestServer(t, 12)
+	anna, annaID := s.join("anna")
+	_, benID := s.join("ben")
+	s.named(annaID)
+	s.named(benID)
+	s.controller.dropAccounts([]string{"id-anna", "id-nobody"})
+	s.tick()
+	assert.Equal(t, []byte{protocol.Denied, protocol.DeniedElsewhere}, anna.read(protocol.Denied))
+	assert.True(t, anna.isClosed())
+	s.tick()
+	assert.Equal(t, 1, s.controller.state.GetPlayerCount())
+}
+
+// Who leaves may want to play elsewhere. The master is told at once that
+// the account is free, not with the next heartbeat seconds later.
+func TestMasterHearsAtOnceWhenAnAccountLeaves(t *testing.T) {
+	s := newTestServer(t, 12)
+	guest, guestID := s.join("guest-rosa")
+	s.named(guestID)
+	s.controller.UnregisterPlayer(guest)
+	s.tick()
+	assert.False(t, s.controller.reportWanted(), "a guest is nobody the master keeps track of")
+
+	anna, annaID := s.join("anna")
+	s.named(annaID)
+	assert.False(t, s.controller.reportWanted())
+	s.controller.UnregisterPlayer(anna)
+	s.tick()
+	assert.True(t, s.controller.reportWanted())
+	assert.False(t, s.controller.reportWanted(), "asked for once")
 }

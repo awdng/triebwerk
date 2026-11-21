@@ -1,6 +1,7 @@
 package game
 
 import (
+	"errors"
 	"log"
 	"sync"
 	"time"
@@ -26,6 +27,11 @@ type leaveEvent struct {
 	conn model.Connection
 }
 
+// accounts the master server wants dropped: they play on another server
+type kickEvent struct {
+	accounts []string
+}
+
 type authEvent struct {
 	player   *model.Player
 	globalID string
@@ -41,7 +47,9 @@ type Controller struct {
 	networkManager *NetworkManager
 	state          *model.GameState
 	masterServer   MasterServerClient
-	maxPlayers     int
+	// who watches the server live, nil if nobody can
+	spectators Spectators
+	maxPlayers int
 	// connections that have not said hello yet: they hold a place on the
 	// server but are no tanks and are not sent anything
 	waiting   []*waitingClient
@@ -56,6 +64,11 @@ type Controller struct {
 	snapshotMutex sync.Mutex
 	snapshot      model.StateSnapshot
 
+	// An account left during this tick. The master is told at once, so the
+	// player can join another server without waiting for the next heartbeat.
+	accountLeft bool
+	reportNow   chan struct{}
+
 	// how long ticks take: their number and the sum in nanoseconds, kept by
 	// the game loop
 	ticksMeasured int64
@@ -68,11 +81,18 @@ type waitingClient struct {
 	since uint32
 }
 
+// Spectators are shown the state of the game after every tick. Publish is
+// called by the game loop and must not hold it up.
+type Spectators interface {
+	Publish(state *model.GameState)
+}
+
 // MasterServerClient ...
 type MasterServerClient interface {
 	Init(address string)
-	GetServerState()
-	SendHeartbeat(model.StateSnapshot)
+	// SendHeartbeat returns the accounts that are to be dropped because
+	// they are in a match on another server already
+	SendHeartbeat(model.StateSnapshot) []string
 	EndGame(model.StateSnapshot)
 	AuthorizePlayer(token string) (globalID string, nickname string, err error)
 }
@@ -86,7 +106,13 @@ func NewController(region string, maxPlayers int, gameLength time.Duration, netw
 		masterServer:   masterServer,
 		maxPlayers:     maxPlayers,
 		snapshot:       state.Snapshot(),
+		reportNow:      make(chan struct{}, 1),
 	}
+}
+
+// Watch lets spectators see the game, to be called before Init
+func (g *Controller) Watch(spectators Spectators) {
+	g.spectators = spectators
 }
 
 // RegisterPlayer registers a networked Player
@@ -125,17 +151,51 @@ func (g *Controller) Init() error {
 	return g.networkManager.Start()
 }
 
-// HeartBeat ...
+// heartbeatInterval is how often the master server hears from this one.
+// An account that leaves is reported at once, but not more often than
+// every reportGap.
+const (
+	heartbeatInterval = 5 * time.Second
+	reportGap         = time.Second
+)
+
+// HeartBeat registers the server with the master and reports to it for as
+// long as the server runs
 func (g *Controller) HeartBeat() {
 	// Wait for Network to become ready
 	time.Sleep(time.Second)
 
-	// log.Printf("GameManager: Server Registered with global ID %s", server.ID)
-
-	ticker := time.NewTicker(time.Second * 5)
+	ticker := time.NewTicker(heartbeatInterval)
 	g.masterServer.Init(g.networkManager.GetAddress())
-	for range ticker.C {
-		g.masterServer.SendHeartbeat(g.latestSnapshot())
+	var last time.Time
+	for {
+		select {
+		case <-ticker.C:
+		case <-g.reportNow:
+			if wait := reportGap - time.Since(last); wait > 0 {
+				time.Sleep(wait)
+			}
+		}
+		last = time.Now()
+		g.dropAccounts(g.masterServer.SendHeartbeat(g.latestSnapshot()))
+	}
+}
+
+// dropAccounts turns away the players of accounts that the master found
+// on another server as well. Safe to call from any goroutine.
+func (g *Controller) dropAccounts(accounts []string) {
+	if len(accounts) > 0 {
+		g.pushEvent(kickEvent{accounts: accounts})
+	}
+}
+
+// reportWanted says, once, that the master should hear from the server now
+func (g *Controller) reportWanted() bool {
+	select {
+	case <-g.reportNow:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -154,6 +214,8 @@ func (g *Controller) handleEvents() {
 			g.removePlayer(e.conn)
 		case authEvent:
 			g.finishAuthorization(e)
+		case kickEvent:
+			g.kick(e.accounts)
 		}
 	}
 }
@@ -238,8 +300,21 @@ func (g *Controller) removePlayer(conn model.Connection) {
 		if p.Client.Connection == conn {
 			g.state.RemovePlayer(p)
 			g.scoreboardDirty = true
+			g.accountLeft = g.accountLeft || p.GlobalID != ""
 			log.Printf("GameManager: Player %d disconnected, %d connected Players", p.ID, g.state.GetPlayerCount())
 			return
+		}
+	}
+}
+
+// kick turns away the players of accounts that play on another server
+func (g *Controller) kick(accounts []string) {
+	for _, p := range g.state.GetPlayers() {
+		for _, account := range accounts {
+			if p.GlobalID != "" && p.GlobalID == account {
+				log.Printf("GameManager: Player %d (%s) plays on another server as well, dropping it here", p.ID, p.GlobalID)
+				g.networkManager.Deny(p.Client, model.DeniedElsewhere)
+			}
 		}
 	}
 }
@@ -258,14 +333,30 @@ func (g *Controller) finishAuthorization(e authEvent) {
 		return
 	}
 	if e.err != nil {
-		log.Printf("GameManager: Player %d (%s) could not be authorized, forcing disconnect: %s", p.ID, p.GlobalID, e.err)
-		p.Client.Connection.Close(writeWait, false)
-		g.networkManager.Disconnect(p.Client)
+		log.Printf("GameManager: Player %d could not be authorized, forcing disconnect: %s", p.ID, e.err)
+		reason := model.DeniedNoMaster
+		switch {
+		case errors.Is(e.err, model.ErrNotAuthorized):
+			reason = model.DeniedNotAuthorized
+		case errors.Is(e.err, model.ErrPlayingElsewhere):
+			reason = model.DeniedElsewhere
+		}
+		g.networkManager.Deny(p.Client, reason)
 		return
 	}
 	p.GlobalID = e.globalID
 	p.Nickname = e.nickname
 	g.scoreboardDirty = true
+	// An account has one tank. A second window, or the page after a reload
+	// while the old connection still hangs on, takes the place of the first.
+	if p.GlobalID != "" {
+		for _, other := range g.state.GetPlayers() {
+			if other != p && other.GlobalID == p.GlobalID {
+				log.Printf("GameManager: Player %d joined again as Player %d (%s), dropping the older connection", other.ID, p.ID, p.GlobalID)
+				g.networkManager.Deny(other.Client, model.DeniedReplaced)
+			}
+		}
+	}
 	log.Printf("GameManager: Player %d authorized successfully as GlobalID %s %s", p.ID, p.GlobalID, p.Nickname)
 }
 
@@ -372,4 +463,16 @@ func (g *Controller) tick(now time.Time) {
 	g.snapshotMutex.Lock()
 	g.snapshot = g.state.Snapshot()
 	g.snapshotMutex.Unlock()
+	// only now: the report is made of the snapshot that was just taken
+	if g.accountLeft {
+		g.accountLeft = false
+		select {
+		case g.reportNow <- struct{}{}:
+		default: // a report is asked for already
+		}
+	}
+
+	if g.spectators != nil {
+		g.spectators.Publish(g.state)
+	}
 }

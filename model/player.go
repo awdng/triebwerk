@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"time"
 )
@@ -36,6 +37,27 @@ type Controls struct {
 	Sequence    uint32
 }
 
+// ErrNotAuthorized is the master server saying no to a player's token. Any
+// other error of an authorization means the master could not be asked.
+var ErrNotAuthorized = errors.New("the master server does not accept this player")
+
+// Why a player is turned away after its hello, as the client is told
+const (
+	// DeniedNotAuthorized: the master server does not accept the token
+	DeniedNotAuthorized byte = 1
+	// DeniedNoMaster: the master server did not answer
+	DeniedNoMaster byte = 2
+	// DeniedElsewhere: the account is in a match on another server
+	DeniedElsewhere byte = 3
+	// DeniedReplaced: the account joined this server again, from another
+	// window or after a reload, and that connection plays now
+	DeniedReplaced byte = 4
+)
+
+// ErrPlayingElsewhere is the master server saying that the account of a
+// token is in a match on another server: an account plays one at a time
+var ErrPlayingElsewhere = errors.New("the account is in a match on another server")
+
 // Player ...
 type Player struct {
 	ID        int
@@ -66,6 +88,10 @@ type Player struct {
 	Starved  bool
 	Collider *RectCollider
 	Client   *Client
+	// its number among the participants of the round, 0 if it takes no part,
+	// and the tick it started to
+	participant int
+	joinedTick  uint32
 }
 
 // NewPlayer creates a new player object

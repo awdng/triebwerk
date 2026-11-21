@@ -151,3 +151,15 @@ func TestBotDoesNotTakeALateSnapshotForTheNextRound(t *testing.T) {
 	assert.Equal(t, 6, r.StateMessages, "they are still snapshots that arrived")
 	assert.Equal(t, uint32(6), r.LastAck)
 }
+
+// bots are guests called load-NN unless they are given the tokens of
+// accounts: then the master server knows them and their scores count
+func TestBotSaysHelloWithItsTokenIfItWasGivenOne(t *testing.T) {
+	cfg := &Config{FirstName: 12, Tokens: []string{"pz_first", "pz_second"}}
+	assert.Equal(t, "pz_first", newBot(0, cfg, &Stats{}).hello())
+	assert.Equal(t, "pz_second", newBot(1, cfg, &Stats{}).hello())
+	third := newBot(2, cfg, &Stats{})
+	assert.Equal(t, "load-14", third.hello(), "no token left: a guest by its name")
+	assert.Equal(t, "load-14", third.Name)
+	assert.Equal(t, "load-12", newBot(0, cfg, &Stats{}).Name, "the report never shows a token")
+}

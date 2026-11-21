@@ -16,6 +16,11 @@
 //	6  Scoreboard  s>c  round length in ms u32, count u8, then per player:
 //	                    id u8, kills u16, deaths u16, name length u8, name utf8
 //	7  Kill        s>c  killer id u8, victim id u8
+//	8  Denied      s>c  reason u8: 1 the master server does not accept the
+//	                    token (sign in again), 2 the master server did not
+//	                    answer, 3 the account is in a match on another
+//	                    server, 4 the account joined this server again and
+//	                    that connection plays now; the connection is closed
 //
 // The unreliable lane carries what is replaced by the next message anyway
 // (types from 16). Messages may be lost, doubled or arrive out of order:
@@ -56,6 +61,7 @@ const (
 	Hello      = 1
 	Welcome    = 2
 	Reject     = 3
+	Denied     = 8
 	RoundStart = 4
 	RoundEnd   = 5
 	Scoreboard = 6
@@ -94,8 +100,10 @@ const (
 	maxDatagram = 1100
 	// MaxSnapshotPlayers is how many tanks fit into one snapshot
 	MaxSnapshotPlayers = (maxDatagram - snapshotHeader) / SnapshotEntrySize
-	// names on the scoreboard are cut to this many bytes
-	maxNameLength = 24
+	// Names on the scoreboard are cut to this many bytes. The longest name
+	// the master server gives fits whole: 20 characters of up to four bytes
+	// and " (guest)". A name that was cut could be taken for another.
+	maxNameLength = 88
 )
 
 // IsReliable says which lane a message type travels on
@@ -202,6 +210,19 @@ func (BinaryProtocol) Welcome(id int, tick uint32, roundLength time.Duration) []
 // Reject turns away a client that speaks another version
 func (BinaryProtocol) Reject() []byte {
 	return []byte{Reject, Version}
+}
+
+// Why a player is turned away after its hello
+const (
+	DeniedNotAuthorized = model.DeniedNotAuthorized
+	DeniedNoMaster      = model.DeniedNoMaster
+	DeniedElsewhere     = model.DeniedElsewhere
+	DeniedReplaced      = model.DeniedReplaced
+)
+
+// Denied turns away a player the master server did not vouch for
+func (BinaryProtocol) Denied(reason byte) []byte {
+	return []byte{Denied, reason}
 }
 
 // RoundStart ...

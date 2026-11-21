@@ -12,6 +12,7 @@ import (
 	"github.com/awdng/triebwerk/loadtest"
 	"github.com/awdng/triebwerk/model"
 	"github.com/awdng/triebwerk/protocol"
+	"github.com/awdng/triebwerk/spectate"
 	"github.com/gorilla/websocket"
 )
 
@@ -244,7 +245,7 @@ func (v *viewer) serve(addr string) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(viewerPage))
+		w.Write(spectate.Page("triebwerk load test"))
 	})
 	mux.HandleFunc("/map.json", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

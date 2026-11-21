@@ -33,12 +33,12 @@ type fakeMaster struct {
 }
 
 func (m *fakeMaster) Init(address string) {}
-func (m *fakeMaster) GetServerState()     {}
 
-func (m *fakeMaster) SendHeartbeat(s model.StateSnapshot) {
+func (m *fakeMaster) SendHeartbeat(s model.StateSnapshot) []string {
 	m.mutex.Lock()
 	defer m.mutex.Unlock()
 	m.heartbeats = append(m.heartbeats, s)
+	return nil
 }
 
 func (m *fakeMaster) EndGame(s model.StateSnapshot) {
@@ -176,17 +176,25 @@ func TestLoad12Players(t *testing.T) {
 	games := master.games()
 	if assert.NotEmpty(t, games, "no round end was reported to the master server") {
 		assert.Len(t, games[0].Players, loadTestPlayers)
+		assert.False(t, games[0].InProgress)
+		assert.Equal(t, uint32(1), games[0].Round)
 		names := map[string]bool{}
+		kills, deaths := 0, 0
 		for _, p := range games[0].Players {
 			names[p.Nickname] = true
+			kills += p.Score
+			deaths += p.Deaths
+			assert.Equal(t, "id-"+p.Nickname, p.GlobalID)
+			assert.Greater(t, p.SecondsPlayed, 0, "%s played the round", p.Nickname)
 		}
+		assert.Equal(t, kills, deaths, "every kill is somebody's death")
 		assert.True(t, names["load-00"], "nicknames come from the auth token, got %v", names)
 	}
 
 	// after everybody left the heartbeat reports an empty server
 	assert.Eventually(t, func() bool {
 		s, ok := master.lastHeartbeat()
-		return ok && len(s.Players) == 0
+		return ok && s.Online == 0
 	}, 12*time.Second, 200*time.Millisecond, "players are still on the server after they disconnected")
 }
 

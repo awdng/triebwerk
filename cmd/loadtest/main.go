@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/awdng/triebwerk/loadtest"
@@ -28,6 +29,8 @@ func main() {
 	minRounds := flag.Int("min-rounds", 1, "with -check: rounds every player has to see end")
 	maxGap := flag.Duration("max-gap", 250*time.Millisecond, "with -check: longest allowed pause between state updates")
 	minRate := flag.Float64("min-rate", 25, "with -check: state updates per second every player has to receive")
+	first := flag.Int("first", 0, "number in the name of the first player (load-00), for bots on several servers")
+	tokens := flag.String("tokens", "", "tokens of accounts on the master server, separated by commas: the first players play as these")
 	flag.Parse()
 
 	if *check && *duration == 0 {
@@ -38,6 +41,8 @@ func main() {
 	runner := loadtest.NewRunner(loadtest.Config{
 		URL:         *url,
 		Players:     *players,
+		FirstName:   *first,
+		Tokens:      accountTokens(*tokens),
 		Duration:    *duration,
 		Reconnect:   *reconnect,
 		LogInterval: 10 * time.Second,
@@ -76,4 +81,15 @@ func main() {
 		os.Exit(1)
 	}
 	fmt.Println("PASS")
+}
+
+// accountTokens splits the -tokens flag
+func accountTokens(list string) []string {
+	var tokens []string
+	for _, token := range strings.Split(list, ",") {
+		if token = strings.TrimSpace(token); token != "" {
+			tokens = append(tokens, token)
+		}
+	}
+	return tokens
 }

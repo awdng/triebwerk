@@ -25,7 +25,7 @@
 #   VIEW_PORT    live view of the bots         38090
 #   MASTER_PORT  fake master server, local     38081
 #   BOTS         simulated players, 0 for none 2
-#   GAME_LENGTH  round length in seconds       300
+#   GAME_LENGTH  round length in seconds       600
 set -uo pipefail
 
 server_dir=$(cd "$(dirname "$0")/.." && pwd)
@@ -152,8 +152,8 @@ start fakemaster "$work/bin/fakemaster" -addr "127.0.0.1:$master_port"
 wait_for_port "$master_port" "${pids[fakemaster]}" fakemaster
 
 # with a certificate the server speaks TLS and offers WebTransport
-start server env PUBLIC_IP="$host" PORT="$game_port" REGION=EU MASTERSERVER_GRPC="127.0.0.1:$master_port" \
-  GAME_LENGTH="${GAME_LENGTH:-300}" MAX_PLAYERS=12 TLS_CERT="$cert" TLS_KEY="$key" "$work/bin/server"
+start server env PUBLIC_IP="$host" PORT="$game_port" REGION=EU MASTER_URL="http://127.0.0.1:$master_port" \
+  GAME_LENGTH="${GAME_LENGTH:-600}" MAX_PLAYERS=12 TLS_CERT="$cert" TLS_KEY="$key" "$work/bin/server"
 wait_for_port "$game_port" "${pids[server]}" server
 
 if [ "$bots" -gt 0 ]; then
@@ -177,7 +177,7 @@ cat <<EOF
 
   Every browser window is one player. Add &latency=100&jitter=40&loss=5 to
   the game URL to simulate a worse network, &net to see what the netcode
-  measures. Rounds last ${GAME_LENGTH:-300}s.
+  measures. Rounds last ${GAME_LENGTH:-600}s.
 EOF
 if [ -n "$cert" ]; then
   cat <<EOF
