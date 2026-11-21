@@ -268,4 +268,6 @@ func TestKeyOfTheSpectatorsComesFromTheKeyOfTheServers(t *testing.T) {
 	assert.Equal(t, key, Key("server-key"))
 	assert.NotEqual(t, key, Key("another-key"))
 	assert.NotContains(t, key, "server-key")
+	// the master server computes the same, see its api/admin_test.go
+	assert.Equal(t, "06c0de71ffe2bdd53019292e401ea947", Key("server-key-for-tests"))
 }
