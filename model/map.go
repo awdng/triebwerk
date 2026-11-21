@@ -950,6 +950,9 @@ func (m *Map) calculateBounds() {
 	m.Max.Y += mapBoundsMargin
 }
 
+// MapName is what the one map of the game is called in the list of servers
+const MapName = "Steelyard"
+
 // NewMap creates a new map object
 func NewMap() *Map {
 	colliders := make([]*Collider, 0)

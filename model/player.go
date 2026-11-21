@@ -66,6 +66,10 @@ type Player struct {
 	Starved  bool
 	Collider *RectCollider
 	Client   *Client
+	// its number among the participants of the round, 0 if it takes no part,
+	// and the tick it started to
+	participant int
+	joinedTick  uint32
 }
 
 // NewPlayer creates a new player object

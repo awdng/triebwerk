@@ -152,7 +152,7 @@ start fakemaster "$work/bin/fakemaster" -addr "127.0.0.1:$master_port"
 wait_for_port "$master_port" "${pids[fakemaster]}" fakemaster
 
 # with a certificate the server speaks TLS and offers WebTransport
-start server env PUBLIC_IP="$host" PORT="$game_port" REGION=EU MASTERSERVER_GRPC="127.0.0.1:$master_port" \
+start server env PUBLIC_IP="$host" PORT="$game_port" REGION=EU MASTER_URL="http://127.0.0.1:$master_port" \
   GAME_LENGTH="${GAME_LENGTH:-300}" MAX_PLAYERS=12 TLS_CERT="$cert" TLS_KEY="$key" "$work/bin/server"
 wait_for_port "$game_port" "${pids[server]}" server
 

@@ -9,7 +9,7 @@ docker-compose up
 Run triebwerk standalone:
 cp .env.dist .env (and change env values)
 make run
-The server waits until it reaches the master server at MASTERSERVER_GRPC,
+The server waits until it reaches the master server at MASTER_URL (http://localhost:8081),
 locally start the fake one first: go run ./cmd/fakemaster -addr :8081
 
 Build triebwerk:

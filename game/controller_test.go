@@ -176,7 +176,6 @@ func (t *testTransport) Unregister(conn model.Connection)              { t.unreg
 type testMaster struct{}
 
 func (testMaster) Init(string)                       {}
-func (testMaster) GetServerState()                   {}
 func (testMaster) SendHeartbeat(model.StateSnapshot) {}
 func (testMaster) EndGame(model.StateSnapshot)       {}
 func (testMaster) AuthorizePlayer(token string) (string, string, error) {
@@ -569,4 +568,81 @@ func TestRoundEndsAndTheNextOneStarts(t *testing.T) {
 	next := conn.read(protocol.RoundStart)
 	assert.Equal(t, protocol.NewBinaryProtocol().RoundStart(s.controller.state.RoundStartTick()), next)
 	assert.Greater(t, s.controller.state.RoundStartTick(), started+31)
+}
+
+// recordingMaster keeps the rounds it is told the end of
+type recordingMaster struct {
+	testMaster
+	mutex sync.Mutex
+	ended []model.StateSnapshot
+}
+
+func (m *recordingMaster) EndGame(s model.StateSnapshot) {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	m.ended = append(m.ended, s)
+}
+
+func (m *recordingMaster) rounds() []model.StateSnapshot {
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	return append([]model.StateSnapshot(nil), m.ended...)
+}
+
+// named ticks until the master server has said who the player is
+func (s *testServer) named(id int) *model.Player {
+	s.t.Helper()
+	require.Eventually(s.t, func() bool {
+		s.tick()
+		return s.player(id).Nickname != ""
+	}, time.Second, time.Millisecond)
+	return s.player(id)
+}
+
+// the scores of the world are made of these reports: everybody who took
+// part is in it, also who left before the end
+func TestEndOfARoundIsReportedToTheMasterServerWithEverybodyWhoTookPart(t *testing.T) {
+	master := &recordingMaster{}
+	transport := &testTransport{}
+	network := NewNetworkManager(transport, protocol.NewBinaryProtocol())
+	controller := NewController("test", 12, 2*time.Second, network, master)
+	transport.unregister = controller.UnregisterPlayer
+	go network.run()
+	s := &testServer{t: t, controller: controller, now: time.Unix(1000, 0)}
+
+	_, annaID := s.join("anna")
+	benConn, benID := s.join("ben")
+	s.named(annaID).Score = 2
+	ben := s.named(benID)
+	ben.Score, ben.Deaths = 5, 1
+	s.controller.UnregisterPlayer(benConn)
+	s.ticks(2000/model.TickMillis + 2)
+
+	require.Eventually(t, func() bool { return len(master.rounds()) == 1 }, time.Second, time.Millisecond)
+	round := master.rounds()[0]
+	assert.Equal(t, uint32(1), round.Round)
+	assert.False(t, round.InProgress)
+	assert.Equal(t, 1, round.Online)
+	assert.InDelta(t, 2000, int(round.GameTime), 100)
+	require.Len(t, round.Players, 2)
+	assert.Equal(t, model.PlayerSnapshot{Slot: 1, GlobalID: "id-anna", Nickname: "anna", Score: 2, SecondsPlayed: 2, Connected: true}, round.Players[0])
+	assert.Equal(t, "ben", round.Players[1].Nickname)
+	assert.Equal(t, 5, round.Players[1].Score)
+	assert.Equal(t, 1, round.Players[1].Deaths)
+	assert.False(t, round.Players[1].Connected)
+
+	// the heartbeats of the pause say the same, should the report be lost
+	s.ticks(30)
+	beat := s.controller.latestSnapshot()
+	assert.Equal(t, round.Players, beat.Players)
+	assert.Equal(t, round.GameTime, beat.GameTime)
+	assert.False(t, beat.InProgress)
+
+	// and the next round starts over
+	s.ticks(int(intermission/(model.TickMillis*time.Millisecond)) + 2)
+	beat = s.controller.latestSnapshot()
+	assert.Equal(t, uint32(2), beat.Round)
+	assert.True(t, beat.InProgress)
+	require.Len(t, beat.Players, 1)
+	assert.Equal(t, 0, beat.Players[0].Score)
 }

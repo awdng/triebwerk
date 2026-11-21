@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"log"
 	"os"
 	"os/signal"
@@ -11,32 +10,17 @@ import (
 	"github.com/awdng/triebwerk"
 	"github.com/awdng/triebwerk/game"
 	"github.com/awdng/triebwerk/infra"
+	"github.com/awdng/triebwerk/model"
 	"github.com/awdng/triebwerk/protocol"
 	"github.com/awdng/triebwerk/transport"
 	"github.com/kelseyhightower/envconfig"
-
-	pb "github.com/awdng/triebwerk-proto/gameserver"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
-// waitForConnection blocks until the master server is reachable
-func waitForConnection(conn *grpc.ClientConn) {
-	conn.Connect()
-	for {
-		state := conn.GetState()
-		if state == connectivity.Ready {
-			return
-		}
-		if state == connectivity.TransientFailure {
-			log.Printf("failed to connect to GRPC backend %s, retrying...", conn.Target())
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		conn.WaitForStateChange(ctx, state)
-		cancel()
-	}
-}
+// set at build time (-ldflags), see the Makefile
+var (
+	CommitHash = "dev"
+	Tag        = ""
+)
 
 func main() {
 	// load env vars into config struct
@@ -45,15 +29,19 @@ func main() {
 		log.Fatal(err)
 	}
 
-	conn, err := grpc.NewClient(config.MasterServerGRPC, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	if err != nil {
-		log.Fatal(err)
-	}
-	waitForConnection(conn)
-
-	defer conn.Close()
-	pbclient := pb.NewGameServerMasterClient(conn)
-	masterServer := infra.NewMasterServerClient(pbclient)
+	masterServer := infra.NewMasterServerClient(infra.MasterConfig{
+		URL:        config.MasterURL,
+		Key:        config.ServerKey,
+		Name:       config.ServerName,
+		Region:     config.Region,
+		Map:        model.MapName,
+		MaxPlayers: config.MaxPlayers,
+		Secure:     config.TLSCert != "",
+		Protocol:   protocol.Version,
+		Version:    CommitHash,
+	})
+	// a server that can not ask the master who a player is can let nobody in
+	masterServer.WaitUntilReachable()
 
 	log.Printf("Loading Triebwerk ...")
 
@@ -78,4 +66,6 @@ func main() {
 
 	s := <-sigs
 	log.Printf("shutdown with signal %s", s)
+	// leave the list of servers now, not after the heartbeats it will miss
+	masterServer.Close()
 }

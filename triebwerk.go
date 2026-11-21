@@ -2,11 +2,19 @@ package triebwerk
 
 // Config from Environment Vars
 type Config struct {
-	PublicIP         string `envconfig:"PUBLIC_IP" required:"false" default:"localhost"`
-	MasterServerGRPC string `envconfig:"MASTERSERVER_GRPC" required:"false" default:"localhost:8081"`
-	Region           string `envconfig:"REGION" required:"true" default:"EU"`
-	Port             int    `envconfig:"PORT" required:"false" default:"80"`
-	MaxPlayers       int    `envconfig:"MAX_PLAYERS" required:"false" default:"12"`
+	// PublicIP is the address or host name clients reach the server at. It
+	// is what the master server lists the server under.
+	PublicIP string `envconfig:"PUBLIC_IP" required:"false" default:"localhost"`
+	// MasterURL of the master server, which lists the servers, knows the
+	// players and keeps the scores
+	MasterURL string `envconfig:"MASTER_URL" required:"false" default:"http://localhost:8081"`
+	// ServerKey is what the master server asks game servers for, if it does
+	ServerKey string `envconfig:"SERVER_KEY" required:"false"`
+	// ServerName in the list of servers, by default region and address
+	ServerName string `envconfig:"SERVER_NAME" required:"false"`
+	Region     string `envconfig:"REGION" required:"true" default:"EU"`
+	Port       int    `envconfig:"PORT" required:"false" default:"80"`
+	MaxPlayers int    `envconfig:"MAX_PLAYERS" required:"false" default:"12"`
 	// GameLength of a round in seconds
 	GameLength int `envconfig:"GAME_LENGTH" required:"false" default:"300"`
 	// TLSCert and TLSKey are the files of a certificate for PublicIP (which

@@ -71,7 +71,6 @@ type waitingClient struct {
 // MasterServerClient ...
 type MasterServerClient interface {
 	Init(address string)
-	GetServerState()
 	SendHeartbeat(model.StateSnapshot)
 	EndGame(model.StateSnapshot)
 	AuthorizePlayer(token string) (globalID string, nickname string, err error)
