@@ -22,7 +22,7 @@ func main() {
 	players := flag.Int("n", 12, "number of simulated players")
 	duration := flag.Duration("d", 0, "duration of the test, 0 runs until interrupted")
 	reconnect := flag.Int("reconnect", 0, "players that leave once mid-game and rejoin")
-	url := flag.String("url", "ws://localhost:9090/echo", "websocket url of the server")
+	url := flag.String("url", "ws://localhost:9090/echo", "address of the server: ws://host:port/echo for its websocket, https://host:port/wt for WebTransport")
 	viewAddr := flag.String("view", ":8090", "address of the live view, empty to disable")
 	check := flag.Bool("check", false, "print a report at the end and exit 1 if the server misbehaved")
 	minRounds := flag.Int("min-rounds", 1, "with -check: rounds every player has to see end")

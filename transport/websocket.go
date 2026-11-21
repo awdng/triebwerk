@@ -1,92 +1,11 @@
-package websocket
+package transport
 
 import (
 	"fmt"
-	"log"
-	"net"
-	"net/http"
-	"strconv"
-	"strings"
-	"sync"
 	"time"
 
-	"github.com/awdng/triebwerk/model"
 	"github.com/gorilla/websocket"
 )
-
-// Transport represents the websocket context
-type Transport struct {
-	upgrader   websocket.Upgrader
-	register   func(conn model.Connection)
-	unregister func(conn model.Connection)
-	mutex      sync.RWMutex
-	port       int
-	address    string
-}
-
-// NewTransport creates the websocket context
-func NewTransport(address string, port int) *Transport {
-	return &Transport{
-		address: address,
-		port:    port,
-		upgrader: websocket.Upgrader{
-			ReadBufferSize:  1024,
-			WriteBufferSize: 1024,
-			CheckOrigin: func(r *http.Request) bool {
-				return true
-			},
-		},
-	}
-}
-
-// GetAddress ...
-func (t *Transport) GetAddress() string {
-	t.mutex.RLock()
-	defer t.mutex.RUnlock()
-	return strings.Join([]string{t.address, strconv.Itoa(t.port)}, ":")
-}
-
-// RegisterNewConnHandler is a callback for new connections
-func (t *Transport) RegisterNewConnHandler(register func(conn model.Connection)) {
-	t.register = register
-}
-
-// UnregisterConnHandler is a callback for closed connections
-func (t *Transport) UnregisterConnHandler(unregister func(conn model.Connection)) {
-	t.unregister = unregister
-}
-
-// Unregister callback
-func (t *Transport) Unregister(conn model.Connection) {
-	t.unregister(conn)
-}
-
-// Init ...
-func (t *Transport) Init() {
-	http.HandleFunc("/echo", func(w http.ResponseWriter, r *http.Request) {
-		ws, err := t.upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		conn := NewConnection(ws)
-		t.register(conn)
-	})
-}
-
-// Run ...
-func (t *Transport) Run() error {
-	t.mutex.Lock()
-	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", t.port))
-	if err != nil {
-		panic(err)
-	}
-	t.port = listener.Addr().(*net.TCPAddr).Port
-	t.mutex.Unlock()
-
-	log.Printf("Starting Triebwerk Websocket Server on %s...", t.GetAddress())
-	return http.Serve(listener, nil)
-}
 
 // Connection represents a websocket connection
 type Connection struct {
@@ -160,6 +79,11 @@ func (c *Connection) Write(data []byte) error {
 	}
 
 	return nil
+}
+
+// WriteUnreliable sends on the same socket: a websocket has one lane
+func (c *Connection) WriteUnreliable(data []byte) error {
+	return c.Write(data)
 }
 
 // Ping sends a ping message to the client

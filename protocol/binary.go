@@ -113,6 +113,11 @@ func (BinaryProtocol) Version() uint8 {
 	return Version
 }
 
+// IsReliable says which lane a message type travels on
+func (BinaryProtocol) IsReliable(messageType byte) bool {
+	return IsReliable(messageType)
+}
+
 // ---- from clients -----------------------------------------------------------
 
 // Decode reads a message of a client. What can not be read comes back as

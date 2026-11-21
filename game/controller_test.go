@@ -27,6 +27,10 @@ type testConn struct {
 	closed    chan struct{}
 	// messages read past while looking for another type
 	skipped [][]byte
+	// types of the messages written to each lane
+	lanes     sync.Mutex
+	reliable  map[byte]int
+	datagrams map[byte]int
 }
 
 type testMessage struct {
@@ -60,11 +64,26 @@ func (c *testConn) Read() ([]byte, error) {
 }
 
 func (c *testConn) Write(data []byte) error {
+	return c.write(data, true)
+}
+
+func (c *testConn) WriteUnreliable(data []byte) error {
+	return c.write(data, false)
+}
+
+func (c *testConn) write(data []byte, reliable bool) error {
 	select {
 	case <-c.closed:
 		return io.ErrClosedPipe
 	default:
 	}
+	c.lanes.Lock()
+	if reliable {
+		c.reliable[data[0]]++
+	} else {
+		c.datagrams[data[0]]++
+	}
+	c.lanes.Unlock()
 	c.out <- append([]byte{}, data...)
 	return nil
 }
@@ -194,7 +213,8 @@ func (s *testServer) ticks(count int) {
 }
 
 func (s *testServer) connect(name string) *testConn {
-	conn := &testConn{t: s.t, name: name, in: make(chan testMessage), out: make(chan []byte, 10000), closed: make(chan struct{})}
+	conn := &testConn{t: s.t, name: name, in: make(chan testMessage), out: make(chan []byte, 10000), closed: make(chan struct{}),
+		reliable: map[byte]int{}, datagrams: map[byte]int{}}
 	s.controller.RegisterPlayer(conn)
 	s.tick()
 	return conn
@@ -441,6 +461,42 @@ func TestPingIsAnsweredWithoutWaitingForATick(t *testing.T) {
 	early := s.connect("early")
 	early.send(protocol.EncodePing(7))
 	assert.Equal(t, protocol.NewBinaryProtocol().Pong(7), early.read(protocol.Pong))
+}
+
+// What must arrive goes out on the reliable lane, what the next message
+// replaces anyway on the unreliable one. A connection decides what a lane is.
+func TestEveryMessageGoesOutOnItsLane(t *testing.T) {
+	transport := &testTransport{}
+	network := NewNetworkManager(transport, protocol.NewBinaryProtocol())
+	controller := NewController("test", 12, time.Second, network, testMaster{})
+	transport.unregister = controller.UnregisterPlayer
+	go network.run()
+	s := &testServer{t: t, controller: controller, now: time.Unix(1000, 0)}
+
+	conn, _ := s.join("anna")
+	conn.send(protocol.EncodePing(1))
+	conn.read(protocol.Pong)
+	// a whole round: start, snapshots, scoreboards, end
+	s.ticks(1000/model.TickMillis + 2)
+	conn.read(protocol.RoundEnd)
+	old := s.connect("old")
+	old.send([]byte{protocol.Hello, protocol.Version + 1})
+	s.tick()
+	old.read(protocol.Reject)
+
+	conn.lanes.Lock()
+	defer conn.lanes.Unlock()
+	for _, messageType := range []byte{protocol.Welcome, protocol.RoundStart, protocol.RoundEnd, protocol.Scoreboard} {
+		assert.NotZero(t, conn.reliable[messageType], "type %d on the reliable lane", messageType)
+		assert.Zero(t, conn.datagrams[messageType], "type %d on the unreliable lane", messageType)
+	}
+	for _, messageType := range []byte{protocol.Snapshot, protocol.Pong} {
+		assert.NotZero(t, conn.datagrams[messageType], "type %d on the unreliable lane", messageType)
+		assert.Zero(t, conn.reliable[messageType], "type %d on the reliable lane", messageType)
+	}
+	old.lanes.Lock()
+	defer old.lanes.Unlock()
+	assert.Equal(t, 1, old.reliable[protocol.Reject])
 }
 
 func TestRoundEndsAndTheNextOneStarts(t *testing.T) {

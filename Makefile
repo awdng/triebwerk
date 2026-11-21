@@ -85,10 +85,13 @@ qa: ## Server, bots and the ../client build for other machines (Tailscale), see 
 loadtest-check: ## Run the real binaries with 12 players for one round, fail on drops, stalls or missing rounds
 	MASTER_PORT=28081 GAME_PORT=29090 GAME_LENGTH=15 ./scripts/loadtest.sh -n 12 -d 35s -check -view ''
 
+loadtest-check-webtransport: ## The same with the players connected over WebTransport
+	TRANSPORT=webtransport MASTER_PORT=28081 GAME_PORT=29090 GAME_LENGTH=15 ./scripts/loadtest.sh -n 12 -d 35s -check -view ''
+
 clean: ## Cleanup runtime files
 	rm -rf triebwerk *.out
 
 clean-all: clean ## Cleanup ALL runtime files
 	rm -rf triebwerk
 
-.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit test-short wasm integration-test cover cover-html build build-static loadtest loadtest-check qa clean clean-all
+.PHONY: help all run tools deps fmt-check fmt lint vet test test-unit test-short wasm integration-test cover cover-html build build-static loadtest loadtest-check loadtest-check-webtransport qa clean clean-all

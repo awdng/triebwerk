@@ -5,12 +5,16 @@ import (
 	"time"
 )
 
-// Connection represents the network connection of the player
+// Connection represents the network connection of the player. It carries
+// the two lanes of the protocol: Write sends what must arrive, in order;
+// WriteUnreliable sends what may be lost or overtaken, as fast as it can.
+// A connection that has only one way to send uses it for both.
 type Connection interface {
 	Ping(writeWait time.Duration)
 	Close(writeWait time.Duration, graceful bool)
 	PrepareWrite(writeWait time.Duration)
 	Write(data []byte) error
+	WriteUnreliable(data []byte) error
 	PrepareRead(maxMessageSize int64, pongWait time.Duration)
 	Read() ([]byte, error)
 	Identifier() string

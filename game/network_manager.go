@@ -24,6 +24,8 @@ const (
 // Protocol is the wire format, see package protocol
 type Protocol interface {
 	Version() uint8
+	// IsReliable says which lane a message of this type travels on
+	IsReliable(messageType byte) bool
 	Decode(data []byte) model.NetworkMessage
 	Welcome(id int, tick uint32, roundLength time.Duration) []byte
 	Reject() []byte
@@ -250,7 +252,12 @@ func (n *NetworkManager) writer(client *model.Client) {
 				return
 			}
 
-			err := client.Connection.Write(message)
+			var err error
+			if len(message) == 0 || n.protocol.IsReliable(message[0]) {
+				err = client.Connection.Write(message)
+			} else {
+				err = client.Connection.WriteUnreliable(message)
+			}
 			if err != nil {
 				log.Printf("Writer: Closing connection for Client %s: %s", client.Connection.Identifier(), err)
 				return

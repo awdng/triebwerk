@@ -125,3 +125,29 @@ func TestBotTellsListenersAboutRounds(t *testing.T) {
 		assert.Equal(t, uint32(70001), snapshots[0].Tick)
 	}
 }
+
+// The end of a round travels on the reliable lane, snapshots on the other:
+// the last snapshots of a round can arrive after its end.
+func TestBotDoesNotTakeALateSnapshotForTheNextRound(t *testing.T) {
+	p := protocol.NewBinaryProtocol()
+	b := testBot()
+	b.handle(p.Welcome(1, 100, time.Minute))
+	b.handle(p.RoundStart(100))
+	b.handle(snapshotFor(101, 1, 0, tank(1, 100, 0)))
+	b.handle(snapshotFor(102, 2, 0, tank(1, 100, 0)))
+	b.handle(p.RoundEnd(104))
+	// overtaken by the end of the round
+	b.handle(snapshotFor(103, 3, 0, tank(1, 100, 0)))
+	b.handle(snapshotFor(104, 4, 0, tank(1, 100, 0)))
+
+	// the pause between two rounds is not a stall
+	time.Sleep(300 * time.Millisecond)
+	b.handle(p.RoundStart(400))
+	b.handle(snapshotFor(401, 5, 0, tank(1, 100, 0)))
+	b.handle(snapshotFor(402, 6, 0, tank(1, 100, 0)))
+
+	r := b.Report()
+	assert.Less(t, r.MaxGap, 250*time.Millisecond)
+	assert.Equal(t, 6, r.StateMessages, "they are still snapshots that arrived")
+	assert.Equal(t, uint32(6), r.LastAck)
+}

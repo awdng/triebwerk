@@ -12,7 +12,7 @@ import (
 	"github.com/awdng/triebwerk/loadtest"
 	"github.com/awdng/triebwerk/model"
 	"github.com/awdng/triebwerk/protocol"
-	websocket "github.com/awdng/triebwerk/transport"
+	"github.com/awdng/triebwerk/transport"
 	gorilla "github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,26 +66,70 @@ func (m *fakeMaster) games() []model.StateSnapshot {
 	return append([]model.StateSnapshot{}, m.endedGames...)
 }
 
-// startServer runs a complete game server in this process on a free port
-func startServer(t *testing.T, master *fakeMaster) string {
-	transport := websocket.NewTransport("localhost", 0)
-	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
+// startServer runs a complete game server in this process on a free port,
+// returns the addresses of its websocket and of its WebTransport endpoint
+func startServer(t *testing.T, master *fakeMaster, config transport.Config) (webSocket string, webTransport string) {
+	config.Address = "localhost"
+	clients := transport.New(config)
+	networkManager := game.NewNetworkManager(clients, protocol.NewBinaryProtocol())
 	controller := game.NewController("test", loadTestPlayers, loadTestRound, networkManager, master)
-	transport.RegisterNewConnHandler(controller.RegisterPlayer)
-	transport.UnregisterConnHandler(controller.UnregisterPlayer)
+	clients.RegisterNewConnHandler(controller.RegisterPlayer)
+	clients.UnregisterConnHandler(controller.UnregisterPlayer)
 	go controller.Init()
+	t.Cleanup(clients.Close)
 
 	// the transport picks a free port when it starts listening
 	var address string
 	require.Eventually(t, func() bool {
-		host, port, err := net.SplitHostPort(transport.GetAddress())
+		host, port, err := net.SplitHostPort(clients.GetAddress())
 		if err != nil || port == "0" {
 			return false
 		}
 		address = net.JoinHostPort(host, port)
 		return true
 	}, 5*time.Second, 20*time.Millisecond)
-	return "ws://" + address + "/echo"
+	return "ws://" + address + "/echo", "https://" + address + "/wt"
+}
+
+// The same players over WebTransport: inputs and snapshots as datagrams,
+// everything else on a stream. Half of them play over the websocket of the
+// same server, in the same match.
+func TestPlayersOverWebTransportAndWebSocketShareAMatch(t *testing.T) {
+	if testing.Short() {
+		t.Skip("takes about 10 seconds, skipped with -short")
+	}
+	master := &fakeMaster{}
+	webSocket, webTransport := startServer(t, master, transport.Config{SelfSigned: true})
+
+	play := func(url string, offset int, reports chan<- loadtest.Report) {
+		runner := loadtest.NewRunner(loadtest.Config{
+			URL:       url,
+			Players:   3,
+			FirstName: offset,
+			Duration:  9 * time.Second,
+			Stagger:   time.Second,
+			Logf:      t.Logf,
+		})
+		reports <- runner.Run(context.Background())
+	}
+	reports := make(chan loadtest.Report, 2)
+	go play(webTransport, 0, reports)
+	go play(webSocket, 3, reports)
+
+	expectations := loadtest.DefaultExpectations(3)
+	// the round is longer than the test
+	expectations.MinRounds = 0
+	for i := 0; i < 2; i++ {
+		report := <-reports
+		t.Log("\n" + report.String())
+		for _, err := range report.Check(expectations) {
+			t.Error(err)
+		}
+		for _, bot := range report.Bots {
+			assert.Equal(t, 6, bot.MaxPlayersSeen, "%s: players of both transports are in one match", bot.Name)
+			assert.Greater(t, bot.Pongs, 3, "%s: pings travel as datagrams and come back", bot.Name)
+		}
+	}
 }
 
 // TestLoad12Players plays with the maximum number of players through a
@@ -97,7 +141,7 @@ func TestLoad12Players(t *testing.T) {
 		t.Skip("load test takes about 40 seconds, skipped with -short")
 	}
 	master := &fakeMaster{}
-	url := startServer(t, master)
+	url, _ := startServer(t, master, transport.Config{})
 
 	runner := loadtest.NewRunner(loadtest.Config{
 		URL:      url,
@@ -174,9 +218,9 @@ func expectRejected(url string) error {
 			}
 			return nil
 		}
-		// a register message means the server accepted the player
-		if len(data) > 1 && data[1] == 2 {
-			return errAccepted(int(data[0]))
+		// a welcome means the server accepted the player
+		if len(data) > 2 && data[0] == protocol.Welcome {
+			return errAccepted(int(data[2]))
 		}
 	}
 }

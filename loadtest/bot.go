@@ -1,5 +1,6 @@
 // Package loadtest simulates players that connect to a triebwerk server over
-// websockets, drive around with random human like inputs, shoot and ping. It records what every player receives so a run can be checked
+// a websocket or WebTransport, drive around with random human like inputs,
+// shoot and ping. It records what every player receives so a run can be checked
 // against expectations (see Report.Check). Used by cmd/loadtest and by the
 // load test in the game package.
 package loadtest
@@ -13,7 +14,6 @@ import (
 
 	"github.com/awdng/triebwerk/model"
 	"github.com/awdng/triebwerk/protocol"
-	"github.com/gorilla/websocket"
 )
 
 // the bits of the keys in an input, in the order of Bot.keys
@@ -66,10 +66,13 @@ type Bot struct {
 	segmentLast  time.Time
 	// shot counter of the own tank in the last snapshot, -1 before the first
 	lastShots int
+	// tick the last round ended at, as the server said
+	roundEnd   uint32
+	roundEnded bool
 }
 
 func newBot(id int, cfg *Config, stats *Stats) *Bot {
-	name := fmt.Sprintf("load-%02d", id)
+	name := fmt.Sprintf("load-%02d", cfg.FirstName+id)
 	return &Bot{
 		Name:      name,
 		url:       cfg.URL,
@@ -129,7 +132,7 @@ func (b *Bot) pressRandomKeys() time.Duration {
 
 // play connects to the server and plays until the deadline or connection loss
 func (b *Bot) play(until time.Time) {
-	c, _, err := websocket.DefaultDialer.Dial(b.url, nil)
+	c, err := dial(b.url)
 	if err != nil {
 		b.cfg.logf("%s: dial failed: %v", b.Name, err)
 		b.lost()
@@ -139,23 +142,15 @@ func (b *Bot) play(until time.Time) {
 	atomic.AddInt64(&b.stats.Connected, 1)
 	defer atomic.AddInt64(&b.stats.Connected, -1)
 
-	var writeMutex sync.Mutex
-	write := func(data []byte) error {
-		writeMutex.Lock()
-		defer writeMutex.Unlock()
-		c.SetWriteDeadline(time.Now().Add(2 * time.Second))
-		return c.WriteMessage(websocket.BinaryMessage, data)
-	}
 	// the name is the auth token, the fake master server uses it as nickname
-	write(protocol.EncodeHello(b.Name))
+	c.Send(protocol.EncodeHello(b.Name))
 
 	done := make(chan struct{})
 	defer close(done)
-	go b.sendInputs(write, until, done)
+	go b.sendInputs(c.Send, until, done)
 
 	for time.Now().Before(until) {
-		c.SetReadDeadline(until)
-		_, data, err := c.ReadMessage()
+		data, err := c.Read(until)
 		if err != nil {
 			if time.Now().Before(until) {
 				b.cfg.logf("%s: connection lost: %v", b.Name, err)
@@ -211,6 +206,7 @@ func (b *Bot) handle(data []byte) {
 			b.bad()
 			return
 		}
+		tick := uint32(data[1]) | uint32(data[2])<<8 | uint32(data[3])<<16 | uint32(data[4])<<24
 		b.mutex.Lock()
 		event := "start"
 		if data[0] == protocol.RoundStart {
@@ -219,10 +215,11 @@ func (b *Bot) handle(data []byte) {
 			event = "end"
 			b.report.RoundsEnded++
 			b.endSegment()
+			b.roundEnd, b.roundEnded = tick, true
 		}
 		b.mutex.Unlock()
 		if b.cfg.OnEvent != nil {
-			b.cfg.OnEvent(event, uint32(data[1])|uint32(data[2])<<8|uint32(data[3])<<16|uint32(data[4])<<24)
+			b.cfg.OnEvent(event, tick)
 		}
 	case protocol.Scoreboard:
 		if _, ok := protocol.DecodeScoreboard(data); !ok {
@@ -271,16 +268,21 @@ func (b *Bot) recordState(snapshot protocol.SnapshotMessage) {
 
 	r := &b.report
 	r.StateMessages++
-	if !b.segmentLast.IsZero() {
-		gap := now.Sub(b.segmentLast)
-		if gap > r.MaxGap {
-			r.MaxGap = gap
+	// a snapshot of a round that is over, overtaken by the news of its end:
+	// it says nothing about the pause that follows
+	late := b.roundEnded && snapshot.Tick <= b.roundEnd
+	if !late {
+		if !b.segmentLast.IsZero() {
+			gap := now.Sub(b.segmentLast)
+			if gap > r.MaxGap {
+				r.MaxGap = gap
+			}
+			b.stats.recordGap(gap)
+		} else {
+			b.segmentStart = now
 		}
-		b.stats.recordGap(gap)
-	} else {
-		b.segmentStart = now
+		b.segmentLast = now
 	}
-	b.segmentLast = now
 
 	// the server applies one input per tick: once it has the first, a tick
 	// without one means inputs arrive later than they are needed

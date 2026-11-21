@@ -13,9 +13,13 @@ import (
 
 // Config of a load test run
 type Config struct {
-	// websocket url of the server, e.g. ws://localhost:9090/echo
+	// Address of the server: ws://localhost:9090/echo for its websocket,
+	// https://localhost:9090/wt for WebTransport (the certificate is not
+	// checked, the bots are a test tool)
 	URL     string
 	Players int
+	// number of the first player's name (load-00), for two runs against one server
+	FirstName int
 	// how long every player stays, 0 runs until the context is cancelled
 	Duration time.Duration
 	// players that leave once after ReconnectAfter and rejoin 5 seconds later

@@ -28,3 +28,6 @@ jobs:
       # 12 simulated players) through a complete round
       - name: Load test with 12 players
         run: make loadtest-check
+
+      - name: Load test with 12 players over WebTransport
+        run: make loadtest-check-webtransport

@@ -12,7 +12,7 @@ import (
 	"github.com/awdng/triebwerk/game"
 	"github.com/awdng/triebwerk/infra"
 	"github.com/awdng/triebwerk/protocol"
-	websocket "github.com/awdng/triebwerk/transport"
+	"github.com/awdng/triebwerk/transport"
 	"github.com/kelseyhightower/envconfig"
 
 	pb "github.com/awdng/triebwerk-proto/gameserver"
@@ -57,11 +57,17 @@ func main() {
 
 	log.Printf("Loading Triebwerk ...")
 
-	transport := websocket.NewTransport(config.PublicIP, config.Port)
-	networkManager := game.NewNetworkManager(transport, protocol.NewBinaryProtocol())
+	clients := transport.New(transport.Config{
+		Address:    config.PublicIP,
+		Port:       config.Port,
+		CertFile:   config.TLSCert,
+		KeyFile:    config.TLSKey,
+		SelfSigned: config.WebTransportSelfSigned,
+	})
+	networkManager := game.NewNetworkManager(clients, protocol.NewBinaryProtocol())
 	controller := game.NewController(config.Region, config.MaxPlayers, time.Duration(config.GameLength)*time.Second, networkManager, masterServer)
-	transport.RegisterNewConnHandler(controller.RegisterPlayer)
-	transport.UnregisterConnHandler(controller.UnregisterPlayer)
+	clients.RegisterNewConnHandler(controller.RegisterPlayer)
+	clients.UnregisterConnHandler(controller.UnregisterPlayer)
 
 	go func() {
 		// start game server
