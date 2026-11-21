@@ -224,3 +224,65 @@ func TestTurretTurnsTheWayTheHullDoes(t *testing.T) {
 	game.Tick()
 	assert.InDelta(t, 0, float64(p.Collider.TurretRotation), 1e-6)
 }
+
+// The client shows its own shots before the server confirms them, it has to
+// know the tick the gun is loaded again (WEAPON_COOLDOWN_TICKS in the
+// client's constants.js).
+func TestHeldTriggerFiresEvery38Ticks(t *testing.T) {
+	p := NewPlayer(1, -128, 28, nil)
+	game := runningGame(p)
+	var fired []uint32
+	for tick := uint32(1); tick <= 120; tick++ {
+		p.Control = Controls{Shoot: true}
+		game.Tick()
+		if p.Fired {
+			fired = append(fired, tick)
+		}
+	}
+	assert.Equal(t, []uint32{1, 39, 77, 115}, fired)
+}
+
+// The browser puts tanks where the server says they are. Their corners have
+// to be where they would be had the tank driven there.
+func TestColliderThatIsPutSomewhereIsWhereItWouldHaveDriven(t *testing.T) {
+	driven := NewPlayer(1, -128, 28, nil)
+	game := runningGame(driven)
+	for tick := 0; tick < 40; tick++ {
+		driven.Control = Controls{Forward: tick%3 != 0, Right: true, TurretLeft: tick > 10}
+		game.Tick()
+	}
+	d := driven.Collider
+	assert.NotZero(t, d.Rotation)
+	assert.NotEqual(t, d.Rotation, d.TurretRotation)
+
+	put := NewRectCollider(5, 5, width, depth)
+	put.SetPose(d.Pivot.X, d.Pivot.Y, d.Rotation, d.TurretRotation)
+	near := func(want, got *Point, name string) {
+		assert.InDelta(t, float64(want.X), float64(got.X), 1e-3, name)
+		assert.InDelta(t, float64(want.Y), float64(got.Y), 1e-3, name)
+	}
+	near(d.Pivot, put.Pivot, "pivot")
+	near(d.Rect.A, put.Rect.A, "corner a")
+	near(d.Rect.B, put.Rect.B, "corner b")
+	near(d.Rect.C, put.Rect.C, "corner c")
+	near(d.Rect.D, put.Rect.D, "corner d")
+	near(d.Look, put.Look, "look")
+	near(d.Turret, put.Turret, "turret")
+	assert.Equal(t, d.Rotation, put.Rotation)
+	assert.Equal(t, d.TurretRotation, put.TurretRotation)
+
+	// and it drives on from there like the one that drove
+	other := NewPlayer(2, 0, 0, nil)
+	other.Collider.SetPose(d.Pivot.X, d.Pivot.Y, d.Rotation, d.TurretRotation)
+	game.AddPlayer(other)
+	driven.Health = 0 // out of the way
+	for tick := 0; tick < 10; tick++ {
+		other.Control = Controls{Forward: true, Left: true, TurretRight: true}
+		driven.Control = other.Control
+		other.HandleMovement(nil, game.Map, StepSeconds)
+		driven.HandleMovement(nil, game.Map, StepSeconds)
+	}
+	near(d.Pivot, other.Collider.Pivot, "pivot after driving on")
+	near(d.Rect.A, other.Collider.Rect.A, "corner after driving on")
+	assert.InDelta(t, float64(d.Rotation), float64(other.Collider.Rotation), 1e-5)
+}

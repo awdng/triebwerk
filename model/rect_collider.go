@@ -34,6 +34,8 @@ type RectCollider struct {
 	RotationSpeed      float32
 	CollisionFront     bool
 	CollisionBack      bool
+	width              float32
+	depth              float32
 }
 
 // NewRectCollider creates a new rectangle collider
@@ -61,6 +63,8 @@ func NewRectCollider(x float32, y float32, width float32, depth float32) *RectCo
 		TurretLastRotation: 0,
 		ForwardSpeed:       15,
 		RotationSpeed:      1.5,
+		width:              width,
+		depth:              depth,
 		CollisionBack:      false,
 		CollisionFront:     false,
 		Rect: &Rect{
@@ -116,6 +120,27 @@ func (r *RectCollider) rotateRectPoint(theta float32, p *Point) {
 	// point back to original position
 	p.X = x + r.Pivot.X
 	p.Y = y + r.Pivot.Y
+}
+
+// SetPose puts the collider at a position with the given angles. All its
+// points are where they would be had it turned and driven there, so the
+// next step collides and moves like it does for a collider that did.
+func (r *RectCollider) SetPose(x, y, rotation, turretRotation float32) {
+	r.Pivot.X, r.Pivot.Y = x, y
+	place := func(p *Point, dx, dy, angle float32) {
+		p.X, p.Y = x+dx, y+dy
+		r.rotateRectPoint(angle, p)
+	}
+	place(r.Rect.A, -r.width/2, r.depth/2, rotation)
+	place(r.Rect.B, r.width/2, r.depth/2, rotation)
+	place(r.Rect.C, r.width/2, -r.depth/2, rotation)
+	place(r.Rect.D, -r.width/2, -r.depth/2, rotation)
+	place(r.Look, 0, 2, rotation)
+	place(r.Turret, 0, 3, turretRotation)
+	r.Rotation, r.LastRotation = rotation, rotation
+	r.TurretRotation, r.TurretLastRotation = turretRotation, turretRotation
+	r.Velocity = 0
+	r.CalcDirection()
 }
 
 // ChangePosition of Collider

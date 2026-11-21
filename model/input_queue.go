@@ -1,11 +1,19 @@
 package model
 
 // InputQueueCapacity is how many inputs of a player wait for their tick. The
-// server applies one per tick; more than a few waiting only add delay.
-const InputQueueCapacity = 4
+// server applies one per tick. A client sends the inputs of all ticks of a
+// frame at once, so at 10 frames per second three arrive together and one
+// should still be in reserve. Clients keep the queue short themselves (the
+// snapshots tell them how full it is); what does not fit is the oldest.
+const InputQueueCapacity = 8
 
 // an input numbered this far beyond the last one is not from this session
 const maxInputLead = 1000
+
+// MaxInputRepeats is how many ticks in a row the last input is applied again
+// when none arrives, a third of a second. That bridges a late packet. After
+// it the keys count as released: a client that is gone does not drive on.
+const MaxInputRepeats = 10
 
 // InputQueue holds the inputs of one player between their arrival and the
 // tick that applies them. Inputs are numbered by the client and may arrive
@@ -15,6 +23,8 @@ type InputQueue struct {
 	pending []Controls
 	// the input of the last tick, repeated while nothing new is waiting
 	last Controls
+	// ticks in a row that repeated it
+	repeats int
 	// Starved counts the ticks that had to repeat an input
 	Starved int
 }
@@ -55,15 +65,21 @@ func (q *InputQueue) Push(c Controls) {
 
 // Next returns the input for the coming tick. With nothing waiting the last
 // input is returned again: the keys stay as they were, and starved is true.
+// After MaxInputRepeats such ticks no key is pressed any more.
 func (q *InputQueue) Next() (c Controls, starved bool) {
 	if len(q.pending) == 0 {
 		if q.last.Sequence != 0 {
 			q.Starved++
 		}
+		if q.repeats >= MaxInputRepeats {
+			return Controls{Sequence: q.last.Sequence}, true
+		}
+		q.repeats++
 		return q.last, true
 	}
 	q.last = q.pending[0]
 	q.pending = q.pending[1:]
+	q.repeats = 0
 	return q.last, false
 }
 
@@ -81,4 +97,5 @@ func (q *InputQueue) Applied() uint32 {
 func (q *InputQueue) Reset() {
 	q.pending = nil
 	q.last = Controls{}
+	q.repeats = 0
 }

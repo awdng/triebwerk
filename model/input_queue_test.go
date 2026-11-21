@@ -114,3 +114,28 @@ func TestInputQueueStartsOverAfterReset(t *testing.T) {
 	q.Push(input(10, true))
 	assert.Equal(t, 1, q.Waiting())
 }
+
+// A client that fell silent with a key pressed must not drive on for ever:
+// a short gap is bridged, after that the keys count as released.
+func TestInputQueueReleasesTheKeysOfASilentClient(t *testing.T) {
+	q := NewInputQueue()
+	q.Push(Controls{Sequence: 5, Forward: true, Right: true, Shoot: true})
+	q.Next()
+	for i := 0; i < MaxInputRepeats; i++ {
+		c, starved := q.Next()
+		assert.True(t, starved)
+		assert.True(t, c.Forward, "repeat %d", i+1)
+	}
+	c, starved := q.Next()
+	assert.True(t, starved)
+	assert.Equal(t, Controls{Sequence: 5}, c, "no key is pressed, the number of the last input stays")
+	assert.Equal(t, uint32(5), q.Applied())
+
+	// it speaks again
+	q.Push(Controls{Sequence: 6, Forward: true})
+	c, starved = q.Next()
+	assert.False(t, starved)
+	assert.True(t, c.Forward)
+	c, _ = q.Next()
+	assert.True(t, c.Forward, "and gaps are bridged again")
+}

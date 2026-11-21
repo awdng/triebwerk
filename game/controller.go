@@ -11,8 +11,11 @@ import (
 // time between the end of a game and the start of the next one
 const intermission = 10 * time.Second
 
-// a connection that has not said hello after this many ticks (5 s) is closed
-const helloTimeoutTicks = 5000 / model.TickMillis
+// A connection that has not said hello after this many ticks (30 s) is
+// closed. Generous on purpose: a browser says hello from its main thread,
+// which can be busy for seconds while a page starts. A socket that is dead
+// is found much earlier by the pings of the network manager.
+const helloTimeoutTicks = 30000 / model.TickMillis
 
 var numMeasurements int64
 var totalMeasurement int64

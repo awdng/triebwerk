@@ -174,9 +174,9 @@ func updateNetworkPlayer(this js.Value, args []js.Value) interface{} {
 		if player.ID != id {
 			continue
 		}
-		player.Collider.ChangePosition(x, y)
-		player.Collider.Rotation = rotation
-		player.Collider.TurretRotation = turretRotation
+		// the corners turn with the tank: other tanks and shells collide
+		// with it the way they do on the server
+		player.Collider.SetPose(x, y, rotation, turretRotation)
 	}
 
 	return js.ValueOf(nil)
