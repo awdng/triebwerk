@@ -672,3 +672,26 @@ func TestPlayerTheMasterTurnsAwayIsToldWhy(t *testing.T) {
 		assert.Empty(t, s.controller.latestSnapshot().Players, "who was turned away took no part in the round")
 	}
 }
+
+type countingSpectators struct {
+	ticks []uint32
+}
+
+func (c *countingSpectators) Publish(state *model.GameState) {
+	c.ticks = append(c.ticks, state.TickNumber())
+}
+
+// who watches a server is shown the state after every tick, between rounds too
+func TestSpectatorsAreShownEveryTick(t *testing.T) {
+	s := newTestServer(t, 12)
+	spectators := &countingSpectators{}
+	s.controller.Watch(spectators)
+	s.ticks(3)
+	s.join("anna")
+	s.ticks(3)
+	require.Len(t, spectators.ticks, 8)
+	for i := 1; i < len(spectators.ticks); i++ {
+		assert.Equal(t, spectators.ticks[i-1]+1, spectators.ticks[i])
+	}
+	assert.Equal(t, s.controller.state.TickNumber(), spectators.ticks[7], "the state after the tick, not before")
+}

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -12,6 +14,7 @@ import (
 	"github.com/awdng/triebwerk/infra"
 	"github.com/awdng/triebwerk/model"
 	"github.com/awdng/triebwerk/protocol"
+	"github.com/awdng/triebwerk/spectate"
 	"github.com/awdng/triebwerk/transport"
 	"github.com/kelseyhightower/envconfig"
 )
@@ -29,10 +32,15 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// what the server is called in the master's list and on its live view
+	name := config.ServerName
+	if name == "" {
+		name = fmt.Sprintf("%s %s:%d", config.Region, config.PublicIP, config.Port)
+	}
 	masterServer := infra.NewMasterServerClient(infra.MasterConfig{
 		URL:        config.MasterURL,
 		Key:        config.ServerKey,
-		Name:       config.ServerName,
+		Name:       name,
 		Region:     config.Region,
 		Map:        model.MapName,
 		MaxPlayers: config.MaxPlayers,
@@ -54,6 +62,11 @@ func main() {
 	})
 	networkManager := game.NewNetworkManager(clients, protocol.NewBinaryProtocol())
 	controller := game.NewController(config.Region, config.MaxPlayers, time.Duration(config.GameLength)*time.Second, networkManager, masterServer)
+	// The match from above for whoever has the link from the master server:
+	// http(s)://host:port/spectate/
+	live := spectate.NewHub(name, spectate.Key(config.ServerKey), config.MaxPlayers)
+	clients.Handle("/spectate/", http.StripPrefix("/spectate", live.Handler()))
+	controller.Watch(live)
 	clients.RegisterNewConnHandler(controller.RegisterPlayer)
 	clients.UnregisterConnHandler(controller.UnregisterPlayer)
 

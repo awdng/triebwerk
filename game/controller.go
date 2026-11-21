@@ -42,7 +42,9 @@ type Controller struct {
 	networkManager *NetworkManager
 	state          *model.GameState
 	masterServer   MasterServerClient
-	maxPlayers     int
+	// who watches the server live, nil if nobody can
+	spectators Spectators
+	maxPlayers int
 	// connections that have not said hello yet: they hold a place on the
 	// server but are no tanks and are not sent anything
 	waiting   []*waitingClient
@@ -69,6 +71,12 @@ type waitingClient struct {
 	since uint32
 }
 
+// Spectators are shown the state of the game after every tick. Publish is
+// called by the game loop and must not hold it up.
+type Spectators interface {
+	Publish(state *model.GameState)
+}
+
 // MasterServerClient ...
 type MasterServerClient interface {
 	Init(address string)
@@ -87,6 +95,11 @@ func NewController(region string, maxPlayers int, gameLength time.Duration, netw
 		maxPlayers:     maxPlayers,
 		snapshot:       state.Snapshot(),
 	}
+}
+
+// Watch lets spectators see the game, to be called before Init
+func (g *Controller) Watch(spectators Spectators) {
+	g.spectators = spectators
 }
 
 // RegisterPlayer registers a networked Player
@@ -375,4 +388,8 @@ func (g *Controller) tick(now time.Time) {
 	g.snapshotMutex.Lock()
 	g.snapshot = g.state.Snapshot()
 	g.snapshotMutex.Unlock()
+
+	if g.spectators != nil {
+		g.spectators.Publish(g.state)
+	}
 }

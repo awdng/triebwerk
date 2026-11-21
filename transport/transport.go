@@ -10,6 +10,9 @@
 // datagrams: a lost snapshot does not delay the next one.
 //
 // GET /transport says which of the two a server offers.
+//
+// The port serves more than the game if it is handed more (Handle): the
+// live view of the server at /spectate/.
 package transport
 
 import (
@@ -66,6 +69,8 @@ type Transport struct {
 	register   func(conn model.Connection)
 	unregister func(conn model.Connection)
 	mux        *http.ServeMux
+	// what the server serves next to the game, see Handle
+	extra map[string]http.Handler
 
 	mutex     sync.RWMutex
 	port      int
@@ -118,9 +123,21 @@ func (t *Transport) offersWebTransport() bool {
 	return t.config.SelfSigned || t.config.CertFile != ""
 }
 
+// Handle serves handler on the server's port (TCP) next to the game, under
+// a pattern of http.ServeMux. To be called before Init.
+func (t *Transport) Handle(pattern string, handler http.Handler) {
+	if t.extra == nil {
+		t.extra = make(map[string]http.Handler)
+	}
+	t.extra[pattern] = handler
+}
+
 // Init ...
 func (t *Transport) Init() {
 	t.mux = http.NewServeMux()
+	for pattern, handler := range t.extra {
+		t.mux.Handle(pattern, handler)
+	}
 	t.mux.HandleFunc(webSocketPath, func(w http.ResponseWriter, r *http.Request) {
 		ws, err := t.upgrader.Upgrade(w, r, nil)
 		if err != nil {

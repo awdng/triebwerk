@@ -1,14 +1,26 @@
-package main
+package spectate
 
-// viewerPage renders the match live from the frames relayed by the viewer.
+import (
+	"html"
+	"strings"
+)
+
+// Page returns the page that draws a match live from the messages of a
+// hub or of the load test (see the package comment). It asks for map.json
+// and opens the WebSocket ws, both next to itself and with the query it was
+// opened with. title is shown as text.
+func Page(title string) []byte {
+	return []byte(strings.ReplaceAll(page, "{{TITLE}}", html.EscapeString(title)))
+}
+
 // The server does not broadcast projectiles, they are animated from the
 // shooting flag of each player. Hits and deaths use the health sent by the server.
-const viewerPage = `<!doctype html>
+const page = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>triebwerk load test</title>
+<title>{{TITLE}}</title>
 <style>
   :root {
     --bg: #0d1117; --panel: #161b22; --line: #30363d; --text: #e6edf3; --muted: #8b949e;
@@ -68,7 +80,7 @@ const viewerPage = `<!doctype html>
 <div id="arena"><canvas id="canvas"></canvas></div>
 <aside>
   <header>
-    <h1>triebwerk load test</h1>
+    <h1>{{TITLE}}</h1>
     <span class="conn"><span id="dot" class="dot"></span><span id="conn">connecting</span></span>
   </header>
   <div class="stats">
@@ -197,13 +209,16 @@ const viewerPage = `<!doctype html>
   function onStats(s) {
     lastStats = s;
     running = s.running;
+    if (s.roundLength) GAME_LENGTH = s.roundLength;
     bots = {};
     (s.bots || []).forEach(function (b) { if (b.id) bots[b.id] = b; });
     set('s-game', running ? 'Running' : 'Paused', running ? 'good' : 'warn');
     set('s-clients', s.connected + '/' + s.clients, s.connected === s.clients ? 'good' : 'warn');
     set('s-ups', running ? s.updatesPerSec : '–', !running ? '' : s.updatesPerSec >= 28 ? 'good' : s.updatesPerSec >= 20 ? 'warn' : 'bad');
     set('s-gap', running ? s.maxGap + 'ms' : '–', !running ? '' : s.maxGap < 60 ? 'good' : s.maxGap < 200 ? 'warn' : 'bad');
-    set('s-lost', s.lostConns, s.lostConns === 0 ? 'good' : 'bad');
+    // a game server's own view does not count lost connections
+    if (s.lostConns === undefined) set('s-lost', '–', '');
+    else set('s-lost', s.lostConns, s.lostConns === 0 ? 'good' : 'bad');
     renderPlayers();
   }
 
@@ -231,7 +246,12 @@ const viewerPage = `<!doctype html>
       bar.style.background = p.health > 50 ? 'var(--good)' : p.health > 25 ? 'var(--warn)' : 'var(--bad)';
       hp.appendChild(bar);
       var deaths = document.createElement('div'); deaths.className = 'deaths';
-      deaths.textContent = '☠' + p.deaths; deaths.title = 'deaths this game';
+      // the server's own count where there is one, else what this page saw
+      if (b && b.kills !== undefined) {
+        deaths.textContent = b.kills + ':' + b.deaths; deaths.title = 'kills and deaths this game';
+      } else {
+        deaths.textContent = '☠' + p.deaths; deaths.title = 'deaths this game';
+      }
       var keys = document.createElement('div'); keys.className = 'keys';
       KEY_GLYPHS.forEach(function (g, i) {
         var k = document.createElement('span');
@@ -414,7 +434,10 @@ const viewerPage = `<!doctype html>
   }
 
   function connect() {
-    var ws = new WebSocket((location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws');
+    // next to this page, with the query it was opened with (the key of a server's view)
+    var target = new URL('ws' + location.search, location.href);
+    target.protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    var ws = new WebSocket(target.href);
     ws.onopen = function () {
       connected = true;
       document.getElementById('dot').className = 'dot on';
@@ -434,7 +457,7 @@ const viewerPage = `<!doctype html>
     };
   }
 
-  fetch('map.json').then(function (r) { return r.json(); }).then(function (m) {
+  fetch('map.json' + location.search).then(function (r) { return r.json(); }).then(function (m) {
     m.inner = { min: { x: m.min.x + 45, y: m.min.y + 45 }, max: { x: m.max.x - 45, y: m.max.y - 45 } };
     map = m;
     resize();

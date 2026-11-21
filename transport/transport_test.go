@@ -14,6 +14,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"testing"
@@ -482,4 +483,23 @@ func TestWebTransportConnectsOverAPathThatCarriesOnly1280Bytes(t *testing.T) {
 	received, err := session.ReceiveDatagram(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, snapshot, received)
+}
+
+// the game server serves more than the game on its port: the live view
+func TestTransportServesWhatItWasHandedNextToTheGame(t *testing.T) {
+	tr := New(Config{Address: "localhost"})
+	tr.Handle("/spectate/", http.StripPrefix("/spectate", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("view " + r.URL.Path))
+	})))
+	tr.Init()
+
+	recorder := httptest.NewRecorder()
+	tr.mux.ServeHTTP(recorder, httptest.NewRequest("GET", "/spectate/map.json", nil))
+	assert.Equal(t, "view /map.json", recorder.Body.String())
+
+	// the game's own paths are still there
+	recorder = httptest.NewRecorder()
+	tr.mux.ServeHTTP(recorder, httptest.NewRequest("GET", "/transport", nil))
+	assert.Equal(t, http.StatusOK, recorder.Code)
+	assert.Contains(t, recorder.Header().Get("Content-Type"), "json")
 }
