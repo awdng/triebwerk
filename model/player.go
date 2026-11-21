@@ -147,12 +147,13 @@ func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 		r.TurretRotation -= 1.5 * dt
 	}
 
+	// the turret turns the way the hull does for the keys of the same name
 	if p.Control.TurretRight {
-		r.TurretRotation -= 1.5 * dt
+		r.TurretRotation += 1.5 * dt
 	}
 
 	if p.Control.TurretLeft {
-		r.TurretRotation += 1.5 * dt
+		r.TurretRotation -= 1.5 * dt
 	}
 
 	rotationDelta := r.Rotation - r.LastRotation

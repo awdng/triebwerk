@@ -203,3 +203,24 @@ func TestTicksAreDeterministic(t *testing.T) {
 		assert.Equal(t, first, play())
 	}
 }
+
+// the keys of the turret turn it the way the keys of the same name turn the hull
+func TestTurretTurnsTheWayTheHullDoes(t *testing.T) {
+	p := NewPlayer(1, -128, 28, nil)
+	game := runningGame(p)
+	p.Control = Controls{Right: true}
+	game.Tick()
+	hull := p.Collider.Rotation
+	assert.InDelta(t, 1.5*0.033, float64(hull), 1e-6)
+	assert.Equal(t, hull, p.Collider.TurretRotation, "the turret sits on the hull")
+
+	p.Control = Controls{TurretRight: true}
+	game.Tick()
+	assert.InDelta(t, 2*1.5*0.033, float64(p.Collider.TurretRotation), 1e-6)
+	assert.Equal(t, hull, p.Collider.Rotation)
+
+	p.Control = Controls{TurretLeft: true}
+	game.Tick()
+	game.Tick()
+	assert.InDelta(t, 0, float64(p.Collider.TurretRotation), 1e-6)
+}
