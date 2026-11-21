@@ -16,7 +16,7 @@ type Config struct {
 	Port       int    `envconfig:"PORT" required:"false" default:"80"`
 	MaxPlayers int    `envconfig:"MAX_PLAYERS" required:"false" default:"12"`
 	// GameLength of a round in seconds
-	GameLength int `envconfig:"GAME_LENGTH" required:"false" default:"300"`
+	GameLength int `envconfig:"GAME_LENGTH" required:"false" default:"600"`
 	// TLSCert and TLSKey are the files of a certificate for PublicIP (which
 	// is a host name then). With one the server speaks TLS and offers
 	// WebTransport next to the WebSocket, on the same port number (UDP).

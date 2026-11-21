@@ -99,7 +99,7 @@ const page = `<!doctype html>
 </aside>
 <script>
 (function () {
-  var GAME_LENGTH = 300000, PROJECTILE_SPEED = 100, HALF_WIDTH = 2.5, HALF_DEPTH = 3.5;
+  var GAME_LENGTH = 600000, PROJECTILE_SPEED = 100, HALF_WIDTH = 2.5, HALF_DEPTH = 3.5;
   var KEY_GLYPHS = ['▲', '▼', '◀', '▶', '↻', '↺', '●'];
   var KEY_TITLES = ['forward', 'backward', 'left', 'right', 'turret right', 'turret left', 'shoot'];
 

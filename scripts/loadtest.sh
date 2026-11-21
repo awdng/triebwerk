@@ -47,7 +47,7 @@ go build -o "$work/loadtest" ./cmd/loadtest || exit 1
 
 "$work/fakemaster" -addr ":$master_port" > "$work/fakemaster.log" 2>&1 &
 master=$!
-PUBLIC_IP=localhost PORT="$game_port" REGION=EU MASTER_URL="http://localhost:$master_port" GAME_LENGTH="${GAME_LENGTH:-300}" \
+PUBLIC_IP=localhost PORT="$game_port" REGION=EU MASTER_URL="http://localhost:$master_port" GAME_LENGTH="${GAME_LENGTH:-600}" \
   WEBTRANSPORT_SELF_SIGNED=true \
   "$work/triebwerk" > "$work/server.log" 2>&1 &
 server=$!

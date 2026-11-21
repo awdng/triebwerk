@@ -41,7 +41,8 @@ server hand out. Eight watchers at most; nobody watching costs nothing.
 Build triebwerk:
 make build-static
 
-GAME_LENGTH (seconds) sets the round length, useful for tests.
+GAME_LENGTH (seconds) sets the round length, 600 (ten minutes) by default;
+short rounds are useful for tests.
 
 How the server keeps time and talks to clients:
 The game moves in ticks of 33 ms. Every tick the server applies one input per
