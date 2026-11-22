@@ -303,3 +303,31 @@ func TestNoKindOfTankIsTheOneToTake(t *testing.T) {
 		}
 	}
 }
+
+// The tank a player joins with is said in the same breath as the hello. A
+// client that says it later, when its tank stands somewhere on the map,
+// would have a tank of another size appear in place: next to a wall, in it.
+func TestAFirstChoiceThatComesWhenTheTankHasBeenDrivenWaitsLikeAnyOther(t *testing.T) {
+	p := NewPlayer(1, -128, 28, nil)
+	game := runningGame(p)
+	p.Control = Controls{Forward: true}
+	ticks(game, 5)
+
+	assert.False(t, p.Choose(Loadout{Tank: SuperKiller, Skin: 2}))
+	assert.Equal(t, Loadout{}, p.Loadout, "still the tank it was")
+	assert.Equal(t, Tanks[Stormblade], p.Spec())
+
+	p.Health = 0
+	ticks(game, 4*ticksPerSecond)
+	assert.Equal(t, Loadout{Tank: SuperKiller, Skin: 2}, p.Loadout)
+}
+
+// turning the turret or firing moves nothing that collides
+func TestAFirstChoiceCountsAtOnceForATankThatOnlyTurnedItsTurret(t *testing.T) {
+	p := NewPlayer(1, -128, 28, nil)
+	game := runningGame(p)
+	p.Control = Controls{TurretLeft: true, Shoot: true}
+	ticks(game, 5)
+	assert.True(t, p.Choose(Loadout{Tank: SuperKiller, Skin: 2}))
+	assert.Equal(t, Loadout{Tank: SuperKiller, Skin: 2}, p.Loadout)
+}

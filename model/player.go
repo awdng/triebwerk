@@ -99,6 +99,8 @@ type Player struct {
 	wanted *Loadout
 	// the player has chosen once: the tank it joined with
 	chose bool
+	// the tank has been driven or turned since the player joined
+	drove bool
 	// its number among the participants of the round, 0 if it takes no part,
 	// and the tick it started to
 	participant int
@@ -140,15 +142,18 @@ func (p *Player) SetTank(kind uint8) {
 }
 
 // Choose is the player saying what to drive. The first choice of a player
-// is the tank it joins with and counts at once. A later one is taken at the
-// next spawn: no tank turns into another one in front of everybody. It
+// is the tank it joins with and counts at once, as long as the tank stands
+// where it was put: a client says it in the same breath as its hello. A
+// later one is taken at the next spawn: no tank turns into another one in
+// front of everybody, and none grows where it stands next to a wall. It
 // returns whether the loadout changed now.
 func (p *Player) Choose(l Loadout) bool {
 	if int(l.Tank) >= len(Tanks) {
 		l.Tank = 0
 	}
-	if !p.chose {
-		p.chose = true
+	first := !p.chose
+	p.chose = true
+	if first && !p.drove {
 		p.wanted = nil
 		return p.equip(l)
 	}
@@ -201,6 +206,9 @@ func (p *Player) HandleRespawn(game *GameState) {
 // HandleMovement ...
 func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 	r := p.Collider
+	if p.Control.Forward || p.Control.Backward || p.Control.Left || p.Control.Right {
+		p.drove = true
+	}
 
 	//check collision of this player against other players
 	r.CollisionFront = false
