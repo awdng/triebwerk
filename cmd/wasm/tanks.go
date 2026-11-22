@@ -163,6 +163,24 @@ func createNetworkPlayer(this js.Value, args []js.Value) interface{} {
 	return js.ValueOf(nil)
 }
 
+// setPlayerTank makes the tank of a player one of another kind: it drives,
+// turns and collides with the numbers of that kind from then on
+func setPlayerTank(this js.Value, args []js.Value) interface{} {
+	id := args[0].Int()
+	kind := uint8(args[1].Int())
+	for _, player := range players {
+		if player.ID == id {
+			player.SetTank(kind)
+		}
+	}
+	return js.ValueOf(nil)
+}
+
+// tankSpecs hands the browser the table of the kinds of tanks, as JSON
+func tankSpecs(this js.Value, args []js.Value) interface{} {
+	return js.ValueOf(model.TankTableJSON())
+}
+
 func updateNetworkPlayer(this js.Value, args []js.Value) interface{} {
 	id := args[0].Int()
 	x := float32(args[1].Float())
@@ -208,6 +226,8 @@ func registerCallbacks() {
 	js.Global().Set("updateNetworkPlayer", js.FuncOf(updateNetworkPlayer))
 	js.Global().Set("getPlayerState", js.FuncOf(getPlayerState))
 	js.Global().Set("checkProjectileCollision", js.FuncOf(checkProjectileCollision))
+	js.Global().Set("setPlayerTank", js.FuncOf(setPlayerTank))
+	js.Global().Set("tankSpecs", js.FuncOf(tankSpecs))
 }
 
 var proto protocol.BinaryProtocol

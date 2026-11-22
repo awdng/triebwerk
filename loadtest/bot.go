@@ -52,6 +52,8 @@ type Bot struct {
 	Name string
 	// what the bot says hello with, see hello
 	token string
+	// what it drives
+	loadout model.Loadout
 
 	url   string
 	rng   *rand.Rand
@@ -82,6 +84,7 @@ func newBot(id int, cfg *Config, stats *Stats) *Bot {
 	return &Bot{
 		Name:      name,
 		token:     token,
+		loadout:   loadoutOf(cfg.FirstName + id),
 		url:       cfg.URL,
 		rng:       rand.New(rand.NewSource(time.Now().UnixNano() + int64(id))),
 		stats:     stats,
@@ -90,6 +93,13 @@ func newBot(id int, cfg *Config, stats *Stats) *Bot {
 		report:    BotReport{Name: name},
 		lastShots: -1,
 	}
+}
+
+// loadoutOf is what the bot with a number drives: the kinds in turn, in a
+// paint job that the number decides too (clients take a skin they do not
+// have for one they have)
+func loadoutOf(number int) model.Loadout {
+	return model.Loadout{Tank: uint8(number % len(model.Tanks)), Skin: uint8(1 + (number*5)%8)}
 }
 
 // hello is what the bot tells the server it is: the token of an account,
@@ -157,6 +167,10 @@ func (b *Bot) play(until time.Time) {
 
 	// the name is the auth token, the fake master server uses it as nickname
 	c.Send(protocol.EncodeHello(b.hello()))
+	// what it wants to drive; a server from before ignores the message
+	if !b.cfg.OneKind {
+		c.Send(protocol.EncodeLoadout(b.loadout))
+	}
 
 	done := make(chan struct{})
 	defer close(done)
@@ -244,6 +258,11 @@ func (b *Bot) handle(data []byte) {
 		b.mutex.Unlock()
 	case protocol.Accounts:
 		if _, ok := protocol.DecodeAccounts(data); !ok {
+			b.bad()
+			return
+		}
+	case protocol.Loadouts:
+		if _, ok := protocol.DecodeLoadouts(data); !ok {
 			b.bad()
 			return
 		}

@@ -16,7 +16,7 @@ import (
 // The layouts in this file are mirrored in the client, src/game/net/protocol.js
 
 func TestLanes(t *testing.T) {
-	for _, reliable := range []byte{Hello, Welcome, Reject, RoundStart, RoundEnd, Scoreboard, Kill, Denied, Accounts} {
+	for _, reliable := range []byte{Hello, Welcome, Reject, RoundStart, RoundEnd, Scoreboard, Kill, Denied, Accounts, Loadout, Loadouts} {
 		assert.True(t, IsReliable(reliable), "type %d", reliable)
 	}
 	for _, unreliable := range []byte{Input, Snapshot, Ping, Pong} {
@@ -387,5 +387,61 @@ func TestAccountsOfMoreThan255PlayersStayInTheirField(t *testing.T) {
 	data := NewBinaryProtocol().Accounts(scoreboardMessage(players...))
 	assert.Len(t, data, 2+255)
 	_, ok := DecodeAccounts(data)
+	assert.True(t, ok)
+}
+
+// ---- kinds of tanks -----------------------------------------------------------------
+
+// what a player wants to drive: the kind of tank and its paint job
+func TestLoadoutSaysWhatAPlayerWantsToDrive(t *testing.T) {
+	p := NewBinaryProtocol()
+	data := EncodeLoadout(model.Loadout{Tank: 3, Skin: 7})
+	assert.Equal(t, []byte{10, 3, 7}, data)
+	message := p.Decode(data)
+	assert.Equal(t, byte(Loadout), message.MessageType)
+	assert.Equal(t, model.Loadout{Tank: 3, Skin: 7}, message.Body)
+
+	for _, bad := range [][]byte{{Loadout}, {Loadout, 3}, {Loadout, 3, 7, 1}} {
+		assert.Equal(t, byte(Malformed), p.Decode(bad).MessageType, "%v", bad)
+	}
+}
+
+// What everybody drives is told beside the scoreboard, like who has an
+// account: a client or bot from before ignores the type it does not know.
+func TestLoadoutsListWhatEverybodyDrives(t *testing.T) {
+	p := NewBinaryProtocol()
+	board := scoreboardMessage(
+		model.ScoreboardEntry{ID: 3, Name: "kayoone", Loadout: model.Loadout{Tank: 1, Skin: 4}},
+		model.ScoreboardEntry{ID: 7, Name: "load-01"},
+		model.ScoreboardEntry{ID: 12, Name: "Jäger", Loadout: model.Loadout{Tank: 6, Skin: 0}},
+	)
+	data := p.Loadouts(board)
+	// count, then id, tank, skin of everybody
+	assert.Equal(t, []byte{11, 3, 3, 1, 4, 7, 0, 0, 12, 6, 0}, data)
+	loadouts, ok := DecodeLoadouts(data)
+	require.True(t, ok)
+	assert.Equal(t, map[int]model.Loadout{3: {Tank: 1, Skin: 4}, 7: {}, 12: {Tank: 6, Skin: 0}}, loadouts)
+
+	assert.Equal(t, []byte{Loadouts, 0}, p.Loadouts(scoreboardMessage()))
+	// the scoreboard itself has not changed
+	plain := scoreboardMessage(model.ScoreboardEntry{ID: 3, Name: "kayoone"}, model.ScoreboardEntry{ID: 7, Name: "load-01"}, model.ScoreboardEntry{ID: 12, Name: "Jäger"})
+	assert.Equal(t, p.Scoreboard(plain), p.Scoreboard(board))
+}
+
+func TestDecodeLoadoutsIsStrict(t *testing.T) {
+	for _, bad := range [][]byte{{}, {Loadouts}, {Loadouts, 1}, {Loadouts, 1, 3, 1}, {Loadouts, 1, 3, 1, 4, 9}, {Loadouts, 2, 3, 1, 4}, {Accounts, 0}} {
+		_, ok := DecodeLoadouts(bad)
+		assert.False(t, ok, "%v", bad)
+	}
+}
+
+func TestLoadoutsOfMoreThan255PlayersStayInTheirField(t *testing.T) {
+	players := make([]model.ScoreboardEntry, 300)
+	for i := range players {
+		players[i] = model.ScoreboardEntry{ID: i % 250}
+	}
+	data := NewBinaryProtocol().Loadouts(scoreboardMessage(players...))
+	assert.Len(t, data, 2+255*3)
+	_, ok := DecodeLoadouts(data)
 	assert.True(t, ok)
 }

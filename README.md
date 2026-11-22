@@ -125,8 +125,23 @@ Ports and options are listed at the top of scripts/qa.sh.
 
 Clients get the names, kills and deaths of all players in a scoreboard message
 (once a second and after every change), followed by a message that lists who
-of them plays with an account (everybody else is a guest), and a kill message
-when a tank is destroyed. The load test bots read both and the checks fail when a player
+of them plays with an account (everybody else is a guest) and one that says
+what everybody drives, and a kill message when a tank is destroyed.
+
+Kinds of tanks:
+There are seven (model/tanks.go, `Tanks`): how fast each drives and turns,
+how fast its turret turns, how long it reloads, what a hit of its gun takes
+and how much of a hit its armour lets through, and how big it is for
+collisions and hits. Health is 0 to 100 for all of them. The first kind is
+the tank the game always had; it is what everybody drives who says nothing.
+A client says what it wants with a Loadout message (kind and skin): the
+first one of a connection counts at once, a later one when the tank is next
+put on the map (respawn, start of a round). The skin is a number the server
+only passes on. The table is also what the browser predicts its own tank
+with: cmd/wasm hands it out (`tankSpecs`), so change the numbers in one
+place and rebuild the wasm (`make wasm`).
+The bots of the load test take the kinds in turn (`-one-kind` for the
+first kind only). The load test bots read both and the checks fail when a player
 never receives a scoreboard, when a message does not have the agreed layout
 or when the server never applies a player's inputs.
 

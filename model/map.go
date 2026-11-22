@@ -1021,7 +1021,9 @@ func NewMap() *Map {
 				Y: 24.7999,
 			},
 			&Point{
-				X: -41.0684,
+				// clear of the building to its west: at -41.07 a tank stood
+				// with one track in its wall and could not drive away
+				X: -37.5,
 				Y: 157.3888,
 			},
 		},

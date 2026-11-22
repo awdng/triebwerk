@@ -370,14 +370,30 @@ func (g *Controller) isConnected(player *model.Player) bool {
 }
 
 // readMessages takes what arrived from a player since the last tick. Inputs
-// are queued for their ticks, they do not move anything here.
+// are queued for their ticks, they do not move anything here. A loadout is
+// what the player wants to drive.
 func (g *Controller) readMessages(p *model.Player) {
 	for len(p.Client.NetworkIn) != 0 {
 		message := <-p.Client.NetworkIn
-		if inputs, ok := message.Body.([]model.Controls); ok {
-			for _, input := range inputs {
+		switch body := message.Body.(type) {
+		case []model.Controls:
+			for _, input := range body {
 				p.Inputs.Push(input)
 			}
+		case model.Loadout:
+			// the tank it joins with at once, another one at the next spawn
+			p.Choose(body)
+		}
+	}
+}
+
+// noteLoadouts sees to it that the clients hear of a tank that changed:
+// the one a player joined with, or the one it came back as
+func (g *Controller) noteLoadouts(players []*model.Player) {
+	for _, p := range players {
+		if p.LoadoutChanged {
+			p.LoadoutChanged = false
+			g.scoreboardDirty = true
 		}
 	}
 }
@@ -449,6 +465,7 @@ func (g *Controller) tick(now time.Time) {
 	// one step for everybody, with the input each client sent for it
 	g.state.ApplyInputs()
 	g.state.Tick()
+	g.noteLoadouts(players)
 
 	if g.state.InProgress() {
 		g.networkManager.SendSnapshots(g.state)

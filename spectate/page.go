@@ -131,7 +131,9 @@ const page = `<!doctype html>
 
   function hull(p) {
     var c = Math.cos(p.rot), s = Math.sin(p.rot);
-    return [[-HALF_WIDTH, HALF_DEPTH], [HALF_WIDTH, HALF_DEPTH], [HALF_WIDTH, -HALF_DEPTH], [-HALF_WIDTH, -HALF_DEPTH]]
+    // as big as its kind of tank is; a server from before says no size
+    var hw = p.w ? p.w / 2 : HALF_WIDTH, hd = p.d ? p.d / 2 : HALF_DEPTH;
+    return [[-hw, hd], [hw, hd], [hw, -hd], [-hw, -hd]]
       .map(function (v) { return { x: p.x + v[0] * c - v[1] * s, y: p.y + v[0] * s + v[1] * c }; });
   }
 

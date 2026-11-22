@@ -25,6 +25,12 @@
 //	                    scoreboard plays with an account of the master
 //	                    server, everybody else is a guest. Follows every
 //	                    scoreboard.
+//	10 Loadout     c>s  kind of tank u8 (model.Tanks), skin u8: what the
+//	                    player wants to drive. The first one of a connection
+//	                    counts at once, a later one at the next spawn. Who
+//	                    sends none drives the first kind.
+//	11 Loadouts    s>c  count u8, then per player: id u8, kind of tank u8,
+//	                    skin u8. Follows every scoreboard, after Accounts.
 //
 // The unreliable lane carries what is replaced by the next message anyway
 // (types from 16). Messages may be lost, doubled or arrive out of order:
@@ -67,6 +73,8 @@ const (
 	Reject     = 3
 	Denied     = 8
 	Accounts   = 9
+	Loadout    = 10
+	Loadouts   = 11
 	RoundStart = 4
 	RoundEnd   = 5
 	Scoreboard = 6
@@ -160,6 +168,11 @@ func (BinaryProtocol) Decode(data []byte) model.NetworkMessage {
 			return message
 		}
 		message.Body = model.Ping{ClientTime: binary.LittleEndian.Uint32(data[1:])}
+	case Loadout:
+		if len(data) != 3 {
+			return message
+		}
+		message.Body = model.Loadout{Tank: data[1], Skin: data[2]}
 	default:
 		return message
 	}
@@ -314,6 +327,20 @@ func (BinaryProtocol) Accounts(board *model.Scoreboard) []byte {
 	return buf
 }
 
+// Loadouts: what everybody on a scoreboard drives
+func (BinaryProtocol) Loadouts(board *model.Scoreboard) []byte {
+	players := board.Players
+	if len(players) > math.MaxUint8 {
+		players = players[:math.MaxUint8]
+	}
+	buf := make([]byte, 0, 2+len(players)*3)
+	buf = append(buf, Loadouts, byte(len(players)))
+	for _, p := range players {
+		buf = append(buf, byte(p.ID), p.Loadout.Tank, p.Loadout.Skin)
+	}
+	return buf
+}
+
 // scoreboardName makes a nickname safe to send: valid utf8 of at most
 // maxNameLength bytes, cut between characters
 func scoreboardName(name string) string {
@@ -344,6 +371,11 @@ func EncodeHello(token string) []byte {
 
 // EncodeInput carries the keys of the newest input and of the ones before
 // it, newest first
+// EncodeLoadout is what a client says it wants to drive
+func EncodeLoadout(loadout model.Loadout) []byte {
+	return []byte{Loadout, loadout.Tank, loadout.Skin}
+}
+
 func EncodeInput(newest uint32, keys []byte) []byte {
 	if len(keys) > MaxInputsPerMessage {
 		keys = keys[:MaxInputsPerMessage]
@@ -405,6 +437,19 @@ func DecodeSnapshot(data []byte) (SnapshotMessage, bool) {
 		}
 	}
 	return snapshot, true
+}
+
+// DecodeLoadouts reads what everybody drives, by player id. It is strict,
+// like DecodeScoreboard.
+func DecodeLoadouts(data []byte) (map[int]model.Loadout, bool) {
+	if len(data) < 2 || data[0] != Loadouts || len(data) != 2+3*int(data[1]) {
+		return nil, false
+	}
+	loadouts := make(map[int]model.Loadout, data[1])
+	for at := 2; at < len(data); at += 3 {
+		loadouts[int(data[at])] = model.Loadout{Tank: data[at+1], Skin: data[at+2]}
+	}
+	return loadouts, true
 }
 
 // DecodeAccounts reads who on the scoreboard has an account. It is strict,

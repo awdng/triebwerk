@@ -22,6 +22,8 @@ type Connection interface {
 }
 
 const respawnTime = 3
+
+// the collider of the first kind of tank, see Tanks
 const width = 5
 const depth = 7
 
@@ -88,6 +90,15 @@ type Player struct {
 	Starved  bool
 	Collider *RectCollider
 	Client   *Client
+	// Loadout is the kind of tank the player drives and its paint job
+	Loadout Loadout
+	// LoadoutChanged is true from the moment the loadout changed until the
+	// game loop has told the clients
+	LoadoutChanged bool
+	// what the player chose while driving, taken at the next spawn
+	wanted *Loadout
+	// the player has chosen once: the tank it joined with
+	chose bool
 	// its number among the participants of the round, 0 if it takes no part,
 	// and the tick it started to
 	participant int
@@ -107,10 +118,76 @@ func NewPlayer(id int, x float32, y float32, conn Connection) *Player {
 	return player
 }
 
+// Spec returns the numbers of the kind of tank the player drives
+func (p *Player) Spec() TankSpec {
+	return SpecOf(p.Loadout.Tank)
+}
+
+// SetTank makes the player's tank one of another kind, where it stands and
+// looking the way it looks. A kind that does not exist is the first.
+func (p *Player) SetTank(kind uint8) {
+	if int(kind) >= len(Tanks) {
+		kind = 0
+	}
+	p.Loadout.Tank = kind
+	spec := Tanks[kind]
+	old := p.Collider
+	collider := NewRectCollider(old.Pivot.X, old.Pivot.Y, spec.Width, spec.Depth)
+	collider.ID = old.ID
+	collider.ForwardSpeed, collider.RotationSpeed = spec.Speed, spec.TurnRate
+	collider.SetPose(old.Pivot.X, old.Pivot.Y, old.Rotation, old.TurretRotation)
+	p.Collider = collider
+}
+
+// Choose is the player saying what to drive. The first choice of a player
+// is the tank it joins with and counts at once. A later one is taken at the
+// next spawn: no tank turns into another one in front of everybody. It
+// returns whether the loadout changed now.
+func (p *Player) Choose(l Loadout) bool {
+	if int(l.Tank) >= len(Tanks) {
+		l.Tank = 0
+	}
+	if !p.chose {
+		p.chose = true
+		p.wanted = nil
+		return p.equip(l)
+	}
+	if l == p.Loadout {
+		p.wanted = nil
+		return false
+	}
+	p.wanted = &l
+	return false
+}
+
+// equip gives the player a loadout and says whether that changed anything
+func (p *Player) equip(l Loadout) bool {
+	if l == p.Loadout {
+		return false
+	}
+	if l.Tank != p.Loadout.Tank {
+		p.SetTank(l.Tank)
+	}
+	p.Loadout = l
+	p.LoadoutChanged = true
+	return true
+}
+
+// takeWanted is called when the tank is put on the map anew
+func (p *Player) takeWanted() {
+	if p.wanted == nil {
+		return
+	}
+	wanted := *p.wanted
+	p.wanted = nil
+	p.equip(wanted)
+}
+
 // HandleRespawn ...
 func (p *Player) HandleRespawn(game *GameState) {
 	m := game.Map
 	if !p.IsAlive() && p.respawnCountdown > respawnTime {
+		p.takeWanted()
 		spawn := m.GetRandomSpawn(game.GetPlayers())
 		p.Health = 100
 		p.respawnCountdown = 0
@@ -162,28 +239,31 @@ func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 		}
 	}
 
-	r.Velocity -= float32(15*1.5) * dt
+	// how fast this kind of tank drives and turns
+	spec := p.Spec()
+
+	r.Velocity -= spec.Speed * 1.5 * dt
 	if r.Velocity < 0 {
 		r.Velocity = 0
 	}
 
 	if p.Control.Right {
-		r.Rotation += 1.5 * dt
-		r.TurretRotation += 1.5 * dt
+		r.Rotation += spec.TurnRate * dt
+		r.TurretRotation += spec.TurnRate * dt
 	}
 
 	if p.Control.Left {
-		r.Rotation -= 1.5 * dt
-		r.TurretRotation -= 1.5 * dt
+		r.Rotation -= spec.TurnRate * dt
+		r.TurretRotation -= spec.TurnRate * dt
 	}
 
 	// the turret turns the way the hull does for the keys of the same name
 	if p.Control.TurretRight {
-		r.TurretRotation += 1.5 * dt
+		r.TurretRotation += spec.TurretRate * dt
 	}
 
 	if p.Control.TurretLeft {
-		r.TurretRotation -= 1.5 * dt
+		r.TurretRotation -= spec.TurretRate * dt
 	}
 
 	rotationDelta := r.Rotation - r.LastRotation
@@ -201,11 +281,11 @@ func (p *Player) HandleMovement(players []*Player, m *Map, dt float32) {
 	movement := 0
 	if p.Control.Forward && !r.CollisionFront {
 		movement = 1
-		r.Velocity += 15 * dt
+		r.Velocity += spec.Speed * dt
 	}
 	if p.Control.Backward && !r.CollisionBack {
 		movement = -1
-		r.Velocity -= 15 * dt
+		r.Velocity -= spec.Speed * dt
 	}
 
 	if movement != 0 {

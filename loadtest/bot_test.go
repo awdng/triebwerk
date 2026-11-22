@@ -51,6 +51,7 @@ func TestBotCountsWhatHappensToItsTank(t *testing.T) {
 	b.handle(p.Kill(model.Kill{Killer: 1, Victim: 2}))
 	b.handle(p.Scoreboard(&model.Scoreboard{Players: []model.ScoreboardEntry{{ID: 1, Name: "a"}, {ID: 2, Name: "b"}}}))
 	b.handle(p.Accounts(&model.Scoreboard{Players: []model.ScoreboardEntry{{ID: 1, Name: "a", Account: true}, {ID: 2, Name: "b"}}}))
+	b.handle(p.Loadouts(&model.Scoreboard{Players: []model.ScoreboardEntry{{ID: 1, Name: "a", Loadout: model.Loadout{Tank: 2, Skin: 3}}, {ID: 2, Name: "b"}}}))
 	b.handle(p.Pong(5))
 	b.handle(p.RoundEnd(106))
 
@@ -163,4 +164,20 @@ func TestBotSaysHelloWithItsTokenIfItWasGivenOne(t *testing.T) {
 	assert.Equal(t, "load-14", third.hello(), "no token left: a guest by its name")
 	assert.Equal(t, "load-14", third.Name)
 	assert.Equal(t, "load-12", newBot(0, cfg, &Stats{}).Name, "the report never shows a token")
+}
+
+// A match of bots shows every kind of tank: they take the kinds in turn.
+func TestBotsDriveEveryKindOfTankInTurn(t *testing.T) {
+	cfg := &Config{Logf: func(string, ...interface{}) {}}
+	seen := map[uint8]bool{}
+	for i := 0; i < len(model.Tanks); i++ {
+		b := newBot(i, cfg, &Stats{})
+		assert.Less(t, int(b.loadout.Tank), len(model.Tanks))
+		assert.GreaterOrEqual(t, b.loadout.Skin, uint8(1))
+		seen[b.loadout.Tank] = true
+	}
+	assert.Len(t, seen, len(model.Tanks))
+	// bots on a second server of a stack go on where the first ones stopped
+	cfg.FirstName = 3
+	assert.Equal(t, uint8(3), newBot(0, cfg, &Stats{}).loadout.Tank)
 }

@@ -30,6 +30,9 @@ type Config struct {
 	ReconnectAfter time.Duration
 	// players join at a random time within this window, default 3s
 	Stagger time.Duration
+	// OneKind makes every player drive the first kind of tank. By default
+	// the players take the kinds in turn, each in one of its paint jobs.
+	OneKind bool
 
 	// optional hooks, called from the bot goroutines: every snapshot a bot
 	// receives, and "start" and "end" of rounds with the tick they happened at

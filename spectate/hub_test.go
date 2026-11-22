@@ -99,6 +99,18 @@ func TestWatcherSeesTheTanksOfEveryTick(t *testing.T) {
 	assert.InDelta(t, 23, first["ty"], 0.001)
 	second := players[1].(map[string]any)
 	assert.InDelta(t, 1.5, second["rot"], 0.001)
+	// every tank is drawn as big as its kind is
+	assert.Equal(t, float64(5), first["w"])
+	assert.Equal(t, float64(7), first["d"])
+	assert.Equal(t, "Stormblade", first["kind"])
+
+	anna.SetTank(model.Buggy)
+	g.Tick()
+	hub.Publish(g)
+	buggy := w.next("frame")["players"].([]any)[0].(map[string]any)
+	assert.Equal(t, float64(4), buggy["w"])
+	assert.Equal(t, float64(5), buggy["d"])
+	assert.Equal(t, "Buggy", buggy["kind"])
 }
 
 func TestShotIsShownInTheTickItWasFired(t *testing.T) {

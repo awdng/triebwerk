@@ -802,3 +802,103 @@ func TestScoreboardIsFollowedByWhoPlaysWithAnAccount(t *testing.T) {
 		s.tick()
 	}
 }
+
+// ---- kinds of tanks -----------------------------------------------------------------
+
+// loadouts reads scoreboards until the one that is followed by loadouts
+// with this many players, and returns them
+func (c *testConn) loadouts(s *testServer, players int) map[int]model.Loadout {
+	c.t.Helper()
+	for i := 0; i < 200; i++ {
+		c.read(protocol.Scoreboard)
+		accounts := c.next()
+		require.Equal(c.t, byte(protocol.Accounts), accounts[0], "after a scoreboard")
+		following := c.next()
+		require.Equal(c.t, byte(protocol.Loadouts), following[0], "after who has an account")
+		loadouts, ok := protocol.DecodeLoadouts(following)
+		require.True(c.t, ok)
+		if len(loadouts) == players {
+			return loadouts
+		}
+		s.tick()
+	}
+	c.t.Fatal("no loadouts")
+	return nil
+}
+
+// The tank a player says it wants when it joins is the tank it has, and
+// everybody is told with the scoreboard.
+func TestAPlayerDrivesWhatItChoseAndEverybodyIsTold(t *testing.T) {
+	s := newTestServer(t, 12)
+	anna, annaID := s.join("anna")
+	anna.send(protocol.EncodeLoadout(model.Loadout{Tank: model.Charger, Skin: 4}))
+	ben, benID := s.join("ben")
+	s.tick()
+
+	assert.Equal(t, model.Loadout{Tank: model.Charger, Skin: 4}, s.player(annaID).Loadout)
+	assert.Equal(t, model.Tanks[model.Charger], s.player(annaID).Spec())
+	assert.Equal(t, model.Loadout{}, s.player(benID).Loadout, "who says nothing drives the first kind")
+	want := map[int]model.Loadout{annaID: {Tank: model.Charger, Skin: 4}, benID: {}}
+	assert.Equal(t, want, anna.loadouts(s, 2))
+	assert.Equal(t, want, ben.loadouts(s, 2))
+}
+
+// A tank does not turn into another one while it drives. What is chosen
+// later is taken at the next spawn, and told at that moment.
+func TestALaterChoiceIsToldWhenTheTankComesBackAsIt(t *testing.T) {
+	s := newTestServer(t, 12)
+	anna, annaID := s.join("anna")
+	anna.send(protocol.EncodeLoadout(model.Loadout{Tank: model.Charger, Skin: 4}))
+	_, _ = s.join("ben")
+	s.tick()
+	anna.send(protocol.EncodeLoadout(model.Loadout{Tank: model.Buggy, Skin: 1}))
+	s.ticks(40)
+	assert.Equal(t, model.Loadout{Tank: model.Charger, Skin: 4}, s.player(annaID).Loadout)
+
+	s.player(annaID).Health = 0
+	// back within four seconds, and the next message about loadouts says so
+	respawned := false
+	for i := 0; i < 130 && !respawned; i++ {
+		s.tick()
+		respawned = s.player(annaID).IsAlive()
+	}
+	require.True(t, respawned)
+	assert.Equal(t, model.Loadout{Tank: model.Buggy, Skin: 1}, s.player(annaID).Loadout)
+	for i := 0; i < 400; i++ {
+		data := anna.next()
+		if data[0] != protocol.Loadouts {
+			continue
+		}
+		loadouts, ok := protocol.DecodeLoadouts(data)
+		require.True(t, ok)
+		if loadouts[annaID] == (model.Loadout{Tank: model.Buggy, Skin: 1}) {
+			return
+		}
+	}
+	t.Fatal("nobody was told about the new tank")
+}
+
+// what is sent as a loadout and is none changes nothing
+func TestLoadoutsThatMakeNoSenseChangeNothing(t *testing.T) {
+	s := newTestServer(t, 12)
+	anna, annaID := s.join("anna")
+	for _, bad := range [][]byte{{protocol.Loadout}, {protocol.Loadout, 1}, {protocol.Loadout, 1, 2, 3}} {
+		anna.send(bad)
+	}
+	s.tick()
+	assert.Equal(t, model.Loadout{}, s.player(annaID).Loadout)
+	// a kind that does not exist is the first kind; the skin is the clients' business
+	anna.send(protocol.EncodeLoadout(model.Loadout{Tank: 200, Skin: 250}))
+	s.tick()
+	assert.Equal(t, model.Loadout{Tank: 0, Skin: 250}, s.player(annaID).Loadout)
+	// a flood of choices is a flood of nothing
+	for i := 0; i < 500; i++ {
+		anna.send(protocol.EncodeLoadout(model.Loadout{Tank: uint8(i % 7), Skin: uint8(i)}))
+		if i%50 == 0 {
+			s.tick()
+		}
+	}
+	s.tick()
+	assert.Equal(t, model.Loadout{Tank: 0, Skin: 250}, s.player(annaID).Loadout, "still the tank it joined with")
+	assert.False(t, anna.isClosed())
+}

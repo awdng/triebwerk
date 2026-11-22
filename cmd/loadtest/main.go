@@ -31,6 +31,7 @@ func main() {
 	minRate := flag.Float64("min-rate", 25, "with -check: state updates per second every player has to receive")
 	first := flag.Int("first", 0, "number in the name of the first player (load-00), for bots on several servers")
 	tokens := flag.String("tokens", "", "tickets of the master server for this game server, separated by commas: the first players play as the accounts they were made for")
+	oneKind := flag.Bool("one-kind", false, "every player drives the first kind of tank; by default the players take the kinds in turn")
 	flag.Parse()
 
 	if *check && *duration == 0 {
@@ -43,6 +44,7 @@ func main() {
 		Players:     *players,
 		FirstName:   *first,
 		Tokens:      accountTokens(*tokens),
+		OneKind:     *oneKind,
 		Duration:    *duration,
 		Reconnect:   *reconnect,
 		LogInterval: 10 * time.Second,

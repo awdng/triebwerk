@@ -1,7 +1,5 @@
 package model
 
-const readyTime = 1.2
-
 // Weapon ...
 type Weapon struct {
 	Projectiles    []*Projectile
@@ -34,7 +32,8 @@ func (w *Weapon) Update(players []*Player, m *Map, dt float32) {
 				continue
 			}
 			if b.IsCollidingWithPlayer(enemy) {
-				enemy.Health -= 25
+				// what the gun gives, as much of it as the armour lets through
+				enemy.Health -= w.owner.Spec().DamageTo(enemy.Spec())
 				if enemy.Health <= 0 {
 					enemy.Health = 0
 					enemy.Deaths++
@@ -60,7 +59,8 @@ func (w *Weapon) Update(players []*Player, m *Map, dt float32) {
 		w.readyCountdown += dt
 		w.owner.Control.Shoot = false
 	}
-	if w.readyCountdown > readyTime {
+	// how long this kind of tank takes to load, see TankSpec.ReloadTicks
+	if w.readyCountdown > w.owner.Spec().Reload {
 		w.ready = true
 		w.readyCountdown = 0
 	}

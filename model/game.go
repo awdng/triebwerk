@@ -69,6 +69,8 @@ func (g *GameState) Start() {
 		p.respawnCountdown = 0
 		p.Inputs.Reset()
 		p.Control = Controls{}
+		// a new round, and the tank that was chosen for it
+		p.takeWanted()
 		spawn := g.Map.GetRandomSpawn(players)
 		p.Collider.ChangePosition(spawn.X, spawn.Y)
 	}

@@ -64,6 +64,10 @@ type tankView struct {
 	Rotation float32 `json:"rot"`
 	Shooting bool    `json:"shoot"`
 	Health   int     `json:"health"`
+	// the kind of tank and the size of what collides
+	Kind  string  `json:"kind"`
+	Width float32 `json:"w"`
+	Depth float32 `json:"d"`
 }
 
 type frameView struct {
@@ -203,6 +207,9 @@ func (h *Hub) Publish(state *model.GameState) {
 				Rotation: p.Collider.Rotation,
 				Shooting: known && last != p.Shots,
 				Health:   p.Health,
+				Kind:     p.Spec().Name,
+				Width:    p.Spec().Width,
+				Depth:    p.Spec().Depth,
 			})
 		}
 		h.shots = shots
