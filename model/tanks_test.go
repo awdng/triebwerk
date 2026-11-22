@@ -39,7 +39,7 @@ func TestThereAreSevenKindsWithNamesAndNumbersThatMakeSense(t *testing.T) {
 		assert.InDelta(t, 16, float64(spec.Speed), 8, spec.Name)
 		assert.InDelta(t, 1.8, float64(spec.TurnRate), 1, spec.Name)
 		assert.InDelta(t, 1.8, float64(spec.TurretRate), 1, spec.Name)
-		assert.InDelta(t, 1.2, float64(spec.Reload), 0.9, spec.Name)
+		assert.InDelta(t, 1.3, float64(spec.Reload), 1, spec.Name)
 		assert.Greater(t, spec.Damage, 0, spec.Name)
 		assert.InDelta(t, 1.2, float64(spec.Armour), 0.5, spec.Name)
 		// the map was built for a tank of 5 by 7: none is much bigger
@@ -115,8 +115,8 @@ func TestAHitTakesWhatTheGunGivesAndTheArmourLetsThrough(t *testing.T) {
 	}
 	// the numbers of the plan, spelled out once
 	assert.Equal(t, 25, Tanks[Stormblade].DamageTo(Tanks[Stormblade]))
-	assert.Equal(t, 80, Tanks[PainMaker].DamageTo(Tanks[Buggy]))
-	assert.Equal(t, 7, Tanks[Buggy].DamageTo(Tanks[Grunt]))
+	assert.Equal(t, 56, Tanks[PainMaker].DamageTo(Tanks[Buggy]))
+	assert.Equal(t, 8, Tanks[Buggy].DamageTo(Tanks[Grunt]))
 }
 
 // a heavy hit on a light tank takes all it has, and no more
@@ -271,5 +271,35 @@ func TestTheTableIsHandedToClientsAsJSON(t *testing.T) {
 	for kind, spec := range Tanks {
 		assert.Equal(t, spec.Name, table[kind]["name"])
 		assert.Equal(t, float64(spec.ReloadTicks()), table[kind]["reloadTicks"])
+	}
+}
+
+// ---- balance ------------------------------------------------------------------------
+
+// secondsToDestroy is how long a gun that never misses takes for a tank at full health
+func secondsToDestroy(shooter, target TankSpec) float64 {
+	hits := int(math.Ceil(100 / float64(shooter.DamageTo(target))))
+	return float64(hits-1) * float64(shooter.ReloadTicks()) * float64(StepSeconds)
+}
+
+// No kind wins by its numbers alone. In a duel against the tank the game
+// always had, with every shot a hit, none is much quicker than the other;
+// and no gun does much more damage in a second than another.
+func TestNoKindOfTankIsTheOneToTake(t *testing.T) {
+	first := Tanks[Stormblade]
+	for _, spec := range Tanks {
+		wins := secondsToDestroy(spec, first)
+		loses := secondsToDestroy(first, spec)
+		t.Logf("%-12s destroys a Stormblade in %.1f s, is destroyed by one in %.1f s, drives %.1f", spec.Name, wins, loses, spec.Speed)
+		assert.InDelta(t, 4.4, wins, 1.2, "%s: seconds to destroy a Stormblade", spec.Name)
+		perSecond := float64(spec.Damage) / (float64(spec.ReloadTicks()) * float64(StepSeconds))
+		assert.InDelta(t, 19, perSecond, 2.5, "%s: damage per second", spec.Name)
+		// what wins the duel is not also the faster tank
+		if loses-wins > 0.5 {
+			assert.Less(t, spec.Speed, first.Speed, "%s wins the duel and outruns the loser", spec.Name)
+		}
+		if spec.Speed > first.Speed {
+			assert.LessOrEqual(t, loses, wins, "%s is faster and wins the duel", spec.Name)
+		}
 	}
 }

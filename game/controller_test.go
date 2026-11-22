@@ -902,3 +902,33 @@ func TestLoadoutsThatMakeNoSenseChangeNothing(t *testing.T) {
 	assert.Equal(t, model.Loadout{Tank: 0, Skin: 250}, s.player(annaID).Loadout, "still the tank it joined with")
 	assert.False(t, anna.isClosed())
 }
+
+// A client says hello and what it wants to drive in one breath, before the
+// server has greeted it. The tank is that one from its first snapshot on:
+// nobody ever sees it as another.
+func TestTheTankAPlayerJoinsWithIsItsTankFromTheFirstMoment(t *testing.T) {
+	s := newTestServer(t, 12)
+	watcher, _ := s.join("watcher")
+	conn := s.connect("anna")
+	conn.send(protocol.EncodeHello("anna"))
+	conn.send(protocol.EncodeLoadout(model.Loadout{Tank: model.Buggy, Skin: 3}))
+	s.tick()
+	welcome := conn.read(protocol.Welcome)
+	annaID := int(welcome[2])
+
+	assert.Equal(t, model.Loadout{Tank: model.Buggy, Skin: 3}, s.player(annaID).Loadout)
+	// the first word about her that anybody hears says so
+	for i := 0; i < 50; i++ {
+		data := watcher.next()
+		if data[0] != protocol.Loadouts {
+			continue
+		}
+		loadouts, ok := protocol.DecodeLoadouts(data)
+		require.True(t, ok)
+		if loadout, there := loadouts[annaID]; there {
+			assert.Equal(t, model.Loadout{Tank: model.Buggy, Skin: 3}, loadout)
+			return
+		}
+	}
+	t.Fatal("nobody was told what anna drives")
+}
