@@ -135,8 +135,9 @@ and how much of a hit its armour lets through, and how big it is for
 collisions and hits. Health is 0 to 100 for all of them. The first kind is
 the tank the game always had; it is what everybody drives who says nothing.
 A client says what it wants with a Loadout message (kind and skin): the
-first one of a connection counts at once, a later one when the tank is next
-put on the map (respawn, start of a round). The skin is a number the server
+first one of a connection counts at once if the tank still stands where it
+was put (clients say it right behind their hello), every other one when the
+tank is next put on the map (respawn, start of a round). The skin is a number the server
 only passes on. The table is also what the browser predicts its own tank
 with: cmd/wasm hands it out (`tankSpecs`), so change the numbers in one
 place and rebuild the wasm (`make wasm`).

@@ -40,26 +40,27 @@ type TankSpec struct {
 }
 
 // Tanks are the kinds there are, indexed by their number. A first balance,
-// made by counting duels against the first kind: what a tank has more of
-// in one column it pays for in another. The damage of a gun per second is
-// close for all of them (between 17 and 21 against plain armour), so a
-// duel is decided by armour, by who is hit, and by who gets away.
+// made by letting every kind duel every other with every shot a hit
+// (TestNoKindOfTankIsTheOneToTake): the damage of a gun per second is
+// close for all of them, a faster tank does not also win the duel, and
+// between two tanks the choice decides about one reload at most. Whether
+// speed has its right price only playing can tell.
 // Width and Depth follow the hulls of the models (client/tools/tanks).
 var Tanks = []TankSpec{
 	// the all-rounder: four hits destroy one of its kind
 	Stormblade: {Name: "Stormblade", Speed: 15, TurnRate: 1.5, TurretRate: 1.5, Reload: 1.2, Damage: 25, Armour: 1, Width: 5, Depth: 7},
-	// fast and nimble, with thinner armour and a gun that takes a little longer
-	Charger: {Name: "Charger", Speed: 17.5, TurnRate: 1.7, TurretRate: 1.7, Reload: 1.3, Damage: 25, Armour: 1.1, Width: 5, Depth: 7},
+	// fast and nimble, with a gun that takes a little longer
+	Charger: {Name: "Charger", Speed: 17.5, TurnRate: 1.7, TurretRate: 1.7, Reload: 1.3, Damage: 25, Armour: 1, Width: 5, Depth: 7},
 	// sturdy and narrow, with a turret that follows quickly and a slower gun
-	Grunt: {Name: "Grunt", Speed: 13.5, TurnRate: 1.4, TurretRate: 1.9, Reload: 1.4, Damage: 25, Armour: 0.85, Width: 4, Depth: 7},
+	Grunt: {Name: "Grunt", Speed: 13.5, TurnRate: 1.4, TurretRate: 1.9, Reload: 1.4, Damage: 25, Armour: 0.9, Width: 4, Depth: 7},
 	// one heavy gun: slow in everything, three hits destroy most tanks
-	PainMaker: {Name: "Pain Maker", Speed: 11.5, TurnRate: 1.1, TurretRate: 1.1, Reload: 2.2, Damage: 40, Armour: 0.8, Width: 5, Depth: 7},
+	PainMaker: {Name: "Pain Maker", Speed: 11.5, TurnRate: 1.1, TurretRate: 1.1, Reload: 2.2, Damage: 38, Armour: 0.8, Width: 5, Depth: 7},
 	// two guns that fire in turn: many light hits
-	SuperKiller: {Name: "Super Killer", Speed: 13, TurnRate: 1.3, TurretRate: 1.4, Reload: 0.7, Damage: 15, Armour: 0.9, Width: 5.5, Depth: 7},
+	SuperKiller: {Name: "Super Killer", Speed: 13, TurnRate: 1.3, TurretRate: 1.4, Reload: 0.7, Damage: 16, Armour: 0.95, Width: 5.5, Depth: 7},
 	// a gun platform: a big target that keeps firing
 	Liquidator: {Name: "Liquidator", Speed: 12, TurnRate: 1.2, TurretRate: 1.3, Reload: 0.9, Damage: 18, Armour: 0.85, Width: 5.5, Depth: 5},
-	// a scout: fast, small, three hits of a tank gun destroy it
-	Buggy: {Name: "Buggy", Speed: 22, TurnRate: 2.4, TurretRate: 2.6, Reload: 0.4, Damage: 9, Armour: 1.4, Width: 4, Depth: 5},
+	// a scout: fast, small, thin-skinned, with a light gun that never stops
+	Buggy: {Name: "Buggy", Speed: 22, TurnRate: 2.4, TurretRate: 2.6, Reload: 0.4, Damage: 9, Armour: 1.3, Width: 4, Depth: 5},
 }
 
 // SpecOf returns the numbers of a kind. A kind that does not exist is the first.

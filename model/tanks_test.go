@@ -115,11 +115,11 @@ func TestAHitTakesWhatTheGunGivesAndTheArmourLetsThrough(t *testing.T) {
 	}
 	// the numbers of the plan, spelled out once
 	assert.Equal(t, 25, Tanks[Stormblade].DamageTo(Tanks[Stormblade]))
-	assert.Equal(t, 56, Tanks[PainMaker].DamageTo(Tanks[Buggy]))
+	assert.Equal(t, 49, Tanks[PainMaker].DamageTo(Tanks[Buggy]))
 	assert.Equal(t, 8, Tanks[Buggy].DamageTo(Tanks[Grunt]))
 }
 
-// a heavy hit on a light tank takes all it has, and no more
+// the last hit on a tank takes what it has left, and no more
 func TestHealthNeverGoesBelowNothing(t *testing.T) {
 	m := NewMap()
 	shooter := NewPlayer(1, 10, 10, nil)
@@ -128,6 +128,8 @@ func TestHealthNeverGoesBelowNothing(t *testing.T) {
 	target.SetTank(Buggy)
 	players := []*Player{shooter, target}
 	hit(shooter, target, players, m)
+	hit(shooter, target, players, m)
+	require.Equal(t, 2, target.Health, "two hits of 49")
 	hit(shooter, target, players, m)
 	assert.Equal(t, 0, target.Health)
 	assert.Equal(t, 1, shooter.Score)
@@ -239,8 +241,10 @@ func TestChoosingWhatThePlayerDrivesIsNoChange(t *testing.T) {
 
 // ---- the map ------------------------------------------------------------------------
 
-// A tank is put on a spawn point looking the way it always does. Whatever
-// its size, it must not stand in a wall there.
+// A tank is put on a spawn point: looking ahead when it comes back from
+// being destroyed, and the way it looked at the end of the last round when
+// a round starts. Whatever its size and wherever it looks, it must not
+// stand in a wall there.
 func TestEverySpawnPointHasRoomForEveryKindOfTank(t *testing.T) {
 	m := NewMap()
 	require.NotEmpty(t, m.Spawns)
@@ -248,10 +252,14 @@ func TestEverySpawnPointHasRoomForEveryKindOfTank(t *testing.T) {
 		for _, spawn := range m.Spawns {
 			p := NewPlayer(1, spawn.X, spawn.Y, nil)
 			p.SetTank(uint8(kind))
-			for i, wall := range m.Collider {
-				assert.False(t, p.Collider.collisionPolygon(wall.getPolygon()), "%s at %.0f, %.0f stands in wall %d", spec.Name, spawn.X, spawn.Y, i)
-			}
 			assert.False(t, m.IsOutOfBounds(p.Collider.Pivot), spec.Name)
+			for step := 0; step < 24; step++ {
+				rotation := float32(step) * math.Pi / 12
+				p.Collider.SetPose(spawn.X, spawn.Y, rotation, rotation)
+				for i, wall := range m.Collider {
+					assert.False(t, p.Collider.collisionPolygon(wall.getPolygon()), "%s at %.0f, %.0f turned by %.2f stands in wall %d", spec.Name, spawn.X, spawn.Y, rotation, i)
+				}
+			}
 		}
 	}
 }
@@ -282,25 +290,67 @@ func secondsToDestroy(shooter, target TankSpec) float64 {
 	return float64(hits-1) * float64(shooter.ReloadTicks()) * float64(StepSeconds)
 }
 
-// No kind wins by its numbers alone. In a duel against the tank the game
-// always had, with every shot a hit, none is much quicker than the other;
-// and no gun does much more damage in a second than another.
+// No kind wins by its numbers alone, and none is never worth taking. Every
+// kind duels every other, with every shot a hit:
+//   - the guns do about the same damage in a second;
+//   - a tank that is clearly faster than another does not also win the duel:
+//     speed is paid for;
+//   - between two tanks the choice of tank decides about one reload at most;
+//   - the scout loses its duels, by a margin its speed and size can make up;
+//   - no tank beats every other tank comfortably, and a tank that beats
+//     none is the fastest of them.
 func TestNoKindOfTankIsTheOneToTake(t *testing.T) {
-	first := Tanks[Stormblade]
-	for _, spec := range Tanks {
-		wins := secondsToDestroy(spec, first)
-		loses := secondsToDestroy(first, spec)
-		t.Logf("%-12s destroys a Stormblade in %.1f s, is destroyed by one in %.1f s, drives %.1f", spec.Name, wins, loses, spec.Speed)
-		assert.InDelta(t, 4.4, wins, 1.2, "%s: seconds to destroy a Stormblade", spec.Name)
+	const (
+		clearlyFaster = 2.0  // units per second
+		oneReload     = 1.35 // seconds, about the reload of the first tank's gun
+		comfortably   = 0.5
+	)
+	scout := Tanks[Buggy]
+	var tanks []TankSpec
+	for kind, spec := range Tanks {
+		if uint8(kind) != Buggy {
+			tanks = append(tanks, spec)
+		}
 		perSecond := float64(spec.Damage) / (float64(spec.ReloadTicks()) * float64(StepSeconds))
 		assert.InDelta(t, 19, perSecond, 2.5, "%s: damage per second", spec.Name)
-		// what wins the duel is not also the faster tank
-		if loses-wins > 0.5 {
-			assert.Less(t, spec.Speed, first.Speed, "%s wins the duel and outruns the loser", spec.Name)
+	}
+	// by how many seconds a destroys b before b destroys a
+	lead := func(a, b TankSpec) float64 { return secondsToDestroy(b, a) - secondsToDestroy(a, b) }
+
+	for _, a := range Tanks {
+		for _, b := range Tanks {
+			if a.Name == b.Name {
+				continue
+			}
+			if a.Speed >= b.Speed+clearlyFaster {
+				assert.LessOrEqual(t, lead(a, b), 0.05, "%s is faster than the %s and wins the duel", a.Name, b.Name)
+			}
 		}
-		if spec.Speed > first.Speed {
-			assert.LessOrEqual(t, loses, wins, "%s is faster and wins the duel", spec.Name)
+	}
+	fastest := tanks[0]
+	for _, a := range tanks {
+		if a.Speed > fastest.Speed {
+			fastest = a
 		}
+	}
+	for _, a := range tanks {
+		least, most := math.Inf(1), math.Inf(-1)
+		for _, b := range tanks {
+			if a.Name == b.Name {
+				continue
+			}
+			l := lead(a, b)
+			least, most = math.Min(least, l), math.Max(most, l)
+			assert.LessOrEqual(t, math.Abs(l), oneReload, "%s against %s: the tank decides the duel", a.Name, b.Name)
+		}
+		t.Logf("%-12s drives %4.1f, leads the other tanks by %+.1f to %+.1f s, the scout by %+.1f s", a.Name, a.Speed, least, most, lead(a, scout))
+		assert.LessOrEqual(t, least, comfortably, "%s beats every other tank comfortably", a.Name)
+		if most < 0.05 {
+			assert.Equal(t, fastest.Name, a.Name, "%s beats no other tank and is not the fastest", a.Name)
+		}
+		// the scout: it loses, and it is not gone before it can get away
+		assert.InDelta(t, 1.9, lead(a, scout), 1.1, "%s against the scout", a.Name)
+		assert.GreaterOrEqual(t, secondsToDestroy(a, scout), 2.0, "%s destroys the scout", a.Name)
 	}
 }
 
@@ -330,4 +380,51 @@ func TestAFirstChoiceCountsAtOnceForATankThatOnlyTurnedItsTurret(t *testing.T) {
 	ticks(game, 5)
 	assert.True(t, p.Choose(Loadout{Tank: SuperKiller, Skin: 2}))
 	assert.Equal(t, Loadout{Tank: SuperKiller, Skin: 2}, p.Loadout)
+}
+
+// ---- from one round to the next ----------------------------------------------------
+
+// The pause between two rounds is longer than any gun takes to load, and
+// clients show the gun as loaded when a round starts. Guns only load while
+// a round runs: one that was fired in the last moment of a round stood
+// still through the pause and went on loading in the next round, for as
+// long as the tank of that round takes.
+func TestARoundStartsWithEveryGunLoaded(t *testing.T) {
+	for _, next := range []uint8{Stormblade, PainMaker} {
+		p := NewPlayer(1, -128, 28, nil)
+		game := runningGame(p)
+		p.Control = Controls{Shoot: true}
+		game.Tick()
+		require.True(t, p.Fired, "the last shot of the round")
+		p.Choose(Loadout{Tank: Charger})
+		p.Choose(Loadout{Tank: next})
+		game.End()
+		ticks(game, 300)
+
+		game.Start()
+		require.Equal(t, next, p.Loadout.Tank)
+		p.Control = Controls{Shoot: true}
+		game.Tick()
+		assert.True(t, p.Fired, "the first shot of the round, as a %s", p.Spec().Name)
+	}
+}
+
+// and nothing of the last round is still in the air
+func TestNoShellOfTheLastRoundFliesInTheNext(t *testing.T) {
+	shooter := NewPlayer(1, -128, 28, nil)
+	target := NewPlayer(2, -128, 68, nil)
+	game := runningGame(shooter, target)
+	shooter.Control = Controls{Shoot: true}
+	game.Tick()
+	require.Len(t, shooter.Weapons[0].Projectiles, 1)
+	game.End()
+	ticks(game, 300)
+
+	game.Start()
+	assert.Empty(t, shooter.Weapons[0].Projectiles)
+	// wherever the round put the two: nobody is hit by a shot nobody fired
+	shooter.Collider.ChangePosition(-128, 28)
+	target.Collider.ChangePosition(-128, 68)
+	ticks(game, ticksPerSecond)
+	assert.Equal(t, 100, target.Health)
 }

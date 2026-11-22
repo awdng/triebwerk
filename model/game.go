@@ -69,6 +69,11 @@ func (g *GameState) Start() {
 		p.respawnCountdown = 0
 		p.Inputs.Reset()
 		p.Control = Controls{}
+		// Guns only load while a round runs. The pause was longer than any
+		// of them takes, and clients show a loaded gun when a round starts.
+		for _, w := range p.Weapons {
+			w.Reset()
+		}
 		// a new round, and the tank that was chosen for it
 		p.takeWanted()
 		spawn := g.Map.GetRandomSpawn(players)

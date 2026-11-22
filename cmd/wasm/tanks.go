@@ -63,9 +63,16 @@ func applyInput(this js.Value, args []js.Value) interface{} {
 	return dst
 }
 
+// checkProjectileCollision says whether a shell at (x, y) hits a tank or a
+// wall. With a third argument, the id of the player that fired it: the
+// hull of that tank is no obstacle, as on the server (Weapon.Update).
 func checkProjectileCollision(this js.Value, args []js.Value) interface{} {
 	posX := float32(args[0].Float())
 	posY := float32(args[1].Float())
+	owner := -1
+	if len(args) > 2 && args[2].Type() == js.TypeNumber {
+		owner = args[2].Int()
+	}
 
 	projectile := &model.Projectile{
 		Position: &model.Point{
@@ -76,7 +83,7 @@ func checkProjectileCollision(this js.Value, args []js.Value) interface{} {
 	}
 
 	for _, p := range players {
-		if projectile.IsCollidingWithPlayer(p) {
+		if p.ID != owner && projectile.IsCollidingWithPlayer(p) {
 			return js.ValueOf(true)
 		}
 	}

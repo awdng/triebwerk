@@ -27,8 +27,10 @@
 //	                    scoreboard.
 //	10 Loadout     c>s  kind of tank u8 (model.Tanks), skin u8: what the
 //	                    player wants to drive. The first one of a connection
-//	                    counts at once, a later one at the next spawn. Who
-//	                    sends none drives the first kind.
+//	                    counts at once while the tank has not been driven
+//	                    (clients send it right behind the hello), every
+//	                    other one at the next spawn. Who sends none drives
+//	                    the first kind.
 //	11 Loadouts    s>c  count u8, then per player: id u8, kind of tank u8,
 //	                    skin u8. Follows every scoreboard, after Accounts.
 //
@@ -369,13 +371,13 @@ func EncodeHello(token string) []byte {
 	return append([]byte{Hello, Version}, token...)
 }
 
-// EncodeInput carries the keys of the newest input and of the ones before
-// it, newest first
 // EncodeLoadout is what a client says it wants to drive
 func EncodeLoadout(loadout model.Loadout) []byte {
 	return []byte{Loadout, loadout.Tank, loadout.Skin}
 }
 
+// EncodeInput carries the keys of the newest input and of the ones before
+// it, newest first
 func EncodeInput(newest uint32, keys []byte) []byte {
 	if len(keys) > MaxInputsPerMessage {
 		keys = keys[:MaxInputsPerMessage]

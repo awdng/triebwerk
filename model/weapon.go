@@ -17,6 +17,14 @@ func NewWeapon(owner *Player) *Weapon {
 	}
 }
 
+// Reset makes the weapon what it is at the start of a round: loaded, with
+// no shell in the air
+func (w *Weapon) Reset() {
+	w.Projectiles = make([]*Projectile, 0)
+	w.ready = true
+	w.readyCountdown = 0
+}
+
 // Update ...
 func (w *Weapon) Update(players []*Player, m *Map, dt float32) {
 	for _, b := range w.Projectiles {
