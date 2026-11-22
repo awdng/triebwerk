@@ -768,3 +768,37 @@ func TestMasterHearsAtOnceWhenAnAccountLeaves(t *testing.T) {
 	assert.True(t, s.controller.reportWanted())
 	assert.False(t, s.controller.reportWanted(), "asked for once")
 }
+
+// ---- who is a guest ------------------------------------------------------------------
+
+// Every scoreboard is followed by who on it plays with an account, so that
+// clients can show who is a guest.
+func TestScoreboardIsFollowedByWhoPlaysWithAnAccount(t *testing.T) {
+	s := newTestServer(t, 12)
+	anna, annaID := s.join("anna")
+	s.named(annaID)
+	_, rosaID := s.join("guest-rosa")
+	s.named(rosaID)
+	s.tick()
+
+	for {
+		board, ok := protocol.DecodeScoreboard(anna.read(protocol.Scoreboard))
+		require.True(t, ok)
+		// right behind it, on the same lane
+		following := anna.next()
+		require.Equal(t, byte(protocol.Accounts), following[0], "the message after a scoreboard")
+		accounts, ok := protocol.DecodeAccounts(following)
+		require.True(t, ok)
+		named := 0
+		for _, p := range board.Players {
+			if p.Name != "" {
+				named++
+			}
+		}
+		if named == 2 {
+			assert.Equal(t, []int{annaID}, accounts, "anna has an account, rosa is a guest")
+			return
+		}
+		s.tick()
+	}
+}

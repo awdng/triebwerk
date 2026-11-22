@@ -16,7 +16,7 @@ import (
 // The layouts in this file are mirrored in the client, src/game/net/protocol.js
 
 func TestLanes(t *testing.T) {
-	for _, reliable := range []byte{Hello, Welcome, Reject, RoundStart, RoundEnd, Scoreboard, Kill, Denied} {
+	for _, reliable := range []byte{Hello, Welcome, Reject, RoundStart, RoundEnd, Scoreboard, Kill, Denied, Accounts} {
 		assert.True(t, IsReliable(reliable), "type %d", reliable)
 	}
 	for _, unreliable := range []byte{Input, Snapshot, Ping, Pong} {
@@ -337,4 +337,55 @@ func TestScoreboardCarriesTheLongestNameTheMasterGivesWhole(t *testing.T) {
 	assert.Equal(t, account+" (guest)", board.Players[0].Name)
 	assert.Equal(t, 88, len(board.Players[0].Name))
 	assert.Equal(t, guest, board.Players[1].Name)
+}
+
+// Who has an account is told beside the scoreboard, in a message of its
+// own: a client or bot from before reads the scoreboard as it always did
+// and ignores the type it does not know.
+func TestAccountsListsWhoOnTheScoreboardPlaysWithAnAccount(t *testing.T) {
+	p := NewBinaryProtocol()
+	board := scoreboardMessage(
+		model.ScoreboardEntry{ID: 3, Kills: 7, Deaths: 2, Name: "kayoone", Account: true},
+		model.ScoreboardEntry{ID: 7, Name: "load-01"},
+		model.ScoreboardEntry{ID: 12, Kills: 300, Name: "Jäger", Account: true},
+	)
+	data := p.Accounts(board)
+	// count, then the ids: everybody else is a guest
+	assert.Equal(t, []byte{9, 2, 3, 12}, data)
+	assert.Equal(t, byte(Accounts), data[0])
+	ids, ok := DecodeAccounts(data)
+	require.True(t, ok)
+	assert.Equal(t, []int{3, 12}, ids)
+
+	assert.Equal(t, []byte{Accounts, 0}, p.Accounts(scoreboardMessage(model.ScoreboardEntry{ID: 7, Name: "load-01"})))
+	assert.Equal(t, []byte{Accounts, 0}, p.Accounts(scoreboardMessage()))
+	ids, ok = DecodeAccounts([]byte{Accounts, 0})
+	require.True(t, ok)
+	assert.Empty(t, ids)
+
+	// the scoreboard itself has not changed
+	guests := scoreboardMessage(
+		model.ScoreboardEntry{ID: 3, Kills: 7, Deaths: 2, Name: "kayoone"},
+		model.ScoreboardEntry{ID: 7, Name: "load-01"},
+		model.ScoreboardEntry{ID: 12, Kills: 300, Name: "Jäger"},
+	)
+	assert.Equal(t, p.Scoreboard(guests), p.Scoreboard(board))
+}
+
+func TestDecodeAccountsIsStrict(t *testing.T) {
+	for _, bad := range [][]byte{{}, {Accounts}, {Accounts, 2, 3}, {Accounts, 1, 3, 4}, {Scoreboard, 0}, {Accounts, 0, 0}} {
+		_, ok := DecodeAccounts(bad)
+		assert.False(t, ok, "%v", bad)
+	}
+}
+
+func TestAccountsOfMoreThan255PlayersStayInTheirField(t *testing.T) {
+	players := make([]model.ScoreboardEntry, 300)
+	for i := range players {
+		players[i] = model.ScoreboardEntry{ID: i % 250, Account: true}
+	}
+	data := NewBinaryProtocol().Accounts(scoreboardMessage(players...))
+	assert.Len(t, data, 2+255)
+	_, ok := DecodeAccounts(data)
+	assert.True(t, ok)
 }

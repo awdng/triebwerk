@@ -21,6 +21,10 @@
 //	                    answer, 3 the account is in a match on another
 //	                    server, 4 the account joined this server again and
 //	                    that connection plays now; the connection is closed
+//	9  Accounts    s>c  count u8, then that many player ids u8: who on the
+//	                    scoreboard plays with an account of the master
+//	                    server, everybody else is a guest. Follows every
+//	                    scoreboard.
 //
 // The unreliable lane carries what is replaced by the next message anyway
 // (types from 16). Messages may be lost, doubled or arrive out of order:
@@ -62,6 +66,7 @@ const (
 	Welcome    = 2
 	Reject     = 3
 	Denied     = 8
+	Accounts   = 9
 	RoundStart = 4
 	RoundEnd   = 5
 	Scoreboard = 6
@@ -297,6 +302,18 @@ func (BinaryProtocol) Scoreboard(board *model.Scoreboard) []byte {
 	return buf
 }
 
+// Accounts: the ids of the players on a scoreboard who have an account
+func (BinaryProtocol) Accounts(board *model.Scoreboard) []byte {
+	buf := []byte{Accounts, 0}
+	for _, p := range board.Players {
+		if p.Account && len(buf) < 2+math.MaxUint8 {
+			buf = append(buf, byte(p.ID))
+		}
+	}
+	buf[1] = byte(len(buf) - 2)
+	return buf
+}
+
 // scoreboardName makes a nickname safe to send: valid utf8 of at most
 // maxNameLength bytes, cut between characters
 func scoreboardName(name string) string {
@@ -388,6 +405,19 @@ func DecodeSnapshot(data []byte) (SnapshotMessage, bool) {
 		}
 	}
 	return snapshot, true
+}
+
+// DecodeAccounts reads who on the scoreboard has an account. It is strict,
+// like DecodeScoreboard.
+func DecodeAccounts(data []byte) ([]int, bool) {
+	if len(data) < 2 || data[0] != Accounts || len(data) != 2+int(data[1]) {
+		return nil, false
+	}
+	ids := make([]int, 0, len(data)-2)
+	for _, id := range data[2:] {
+		ids = append(ids, int(id))
+	}
+	return ids, true
 }
 
 // DecodeScoreboard reads a scoreboard. It is strict: every byte has to be

@@ -15,6 +15,9 @@ type ScoreboardEntry struct {
 	Kills  int
 	Deaths int
 	Name   string
+	// Account: the player plays with an account of the master server.
+	// Everybody else is a guest.
+	Account bool
 }
 
 // Kill says who destroyed whom, by player id
@@ -31,7 +34,7 @@ func (g *GameState) Scoreboard() *Scoreboard {
 		Players:     make([]ScoreboardEntry, 0, len(players)),
 	}
 	for _, p := range players {
-		board.Players = append(board.Players, ScoreboardEntry{ID: p.ID, Kills: p.Score, Deaths: p.Deaths, Name: p.Nickname})
+		board.Players = append(board.Players, ScoreboardEntry{ID: p.ID, Kills: p.Score, Deaths: p.Deaths, Name: p.Nickname, Account: p.GlobalID != ""})
 	}
 	return board
 }

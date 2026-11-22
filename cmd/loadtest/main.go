@@ -30,7 +30,7 @@ func main() {
 	maxGap := flag.Duration("max-gap", 250*time.Millisecond, "with -check: longest allowed pause between state updates")
 	minRate := flag.Float64("min-rate", 25, "with -check: state updates per second every player has to receive")
 	first := flag.Int("first", 0, "number in the name of the first player (load-00), for bots on several servers")
-	tokens := flag.String("tokens", "", "tokens of accounts on the master server, separated by commas: the first players play as these")
+	tokens := flag.String("tokens", "", "tickets of the master server for this game server, separated by commas: the first players play as the accounts they were made for")
 	flag.Parse()
 
 	if *check && *duration == 0 {

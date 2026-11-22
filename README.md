@@ -23,8 +23,10 @@ master has forgotten it, and says goodbye when it stops.
 MASTER_URL    address of the master, default http://localhost:8081
 SERVER_KEY    what the master asks game servers for, if it does
 SERVER_NAME   name in the list of servers, default "<REGION> <PUBLIC_IP>:<PORT>"
-A token that is a session of an account makes the player that account, any
-other token is the name of a guest. An account plays one match at a time:
+A client says hello with a token. A ticket of the master (pt_...) makes the
+player an account: the client got it from the master for this one join, and
+the game server never sees the session behind it. Any other token is the
+name of a guest. An account plays one match at a time:
 the master turns it away while it is in a match on another server, and on
 one server a second connection of an account takes the place of the first
 (a second window, a reload). The server tells the master at once when an
@@ -32,8 +34,9 @@ account leaves, and drops the accounts a heartbeat's answer names. A player the 
 why (message Denied) before the connection is closed.
 cmd/fakemaster speaks the same API, accepts every server, takes every player
 for a guest by the name given and keeps nothing: the tests and scripts of this repository need no master.
-`make stack` in ../master runs the real thing: master, several game servers,
-bots that play as accounts (cmd/loadtest -tokens).
+`make stack` in ../master runs the real thing: master, several game servers
+and bots. Bots play as accounts when they are given tickets (cmd/loadtest
+-tokens), which is what the master's end to end test does.
 
 Watching a server:
 Every game server shows its match from above at http://<address>/spectate/
@@ -121,8 +124,9 @@ logs), which is why it has to be asked for.
 Ports and options are listed at the top of scripts/qa.sh.
 
 Clients get the names, kills and deaths of all players in a scoreboard message
-(once a second and after every change) and a kill message when a tank is
-destroyed. The load test bots read both and the checks fail when a player
+(once a second and after every change), followed by a message that lists who
+of them plays with an account (everybody else is a guest), and a kill message
+when a tank is destroyed. The load test bots read both and the checks fail when a player
 never receives a scoreboard, when a message does not have the agreed layout
 or when the server never applies a player's inputs.
 

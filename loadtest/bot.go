@@ -242,6 +242,11 @@ func (b *Bot) handle(data []byte) {
 		b.mutex.Lock()
 		b.report.Scoreboards++
 		b.mutex.Unlock()
+	case protocol.Accounts:
+		if _, ok := protocol.DecodeAccounts(data); !ok {
+			b.bad()
+			return
+		}
 	case protocol.Kill:
 		if len(data) != 3 {
 			b.bad()
